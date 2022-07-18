@@ -8,21 +8,42 @@ def main():
     cudnn.benchmark = True
     severity = [5]
     common_corruptions = [
-        'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur',
-        'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog', 'brightness', 'contrast',
-        'elastic_transform', 'pixelate', 'jpeg_compression'
+        'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur',
+        'glass_blur', 'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
+        'brightness', 'contrast', 'elastic_transform', 'pixelate',
+        'jpeg_compression'
     ]
 
     net = init_net(args)
 
-    # disc adaption phase
-    dua(args, net, severity, common_corruptions, True)
+    # # disc adaption phase
+    # dua(args, net, severity, common_corruptions, True)
 
-    # disc plug and play
+    # # disc plug and play
     disc(args, net, severity, common_corruptions)
 
-    ckpt = torch.load(args.ckpt_path)
-    baseline_src_only(net, severity, common_corruptions, args, ckpt)
+    # baseline_source_only(net, severity, common_corruptions, args)
+
+    # baseline_disjoint(net, severity, common_corruptions, args, 'online')
+    # baseline_disjoint(net, severity, common_corruptions, args, 'offline')
+
+    # baseline_freezing(net, severity, common_corruptions, args, 'online')
+    # baseline_freezing(net, severity, common_corruptions, args, 'offline')
+
+
+
+    # TODO
+    #   dua bn stats selection
+    #   add dataset name to folder paths
+    #   use download flag once only (reorganize data_loader)
+    #   corruption -> task
+    #   globals
+    #   logger
+    #   better prints
+    #   validation set deepcpy needed?
+    #   bn file path
+    #   check if model ckpt exists, train if not
+    #   error handling
 
 
 
@@ -33,15 +54,24 @@ def init_net(args):
     else:
         def gn_helper(planes):
             return nn.GroupNorm(args.group_norm, planes)
+        norm_layer = gn_helper
+
+    def get_heads_classification():
+        layers = [m for m in net.modules()]
+        return layers[-1]
 
     if args.model == 'wrn':
         net = WideResNet(widen_factor=2, depth=40, num_classes=10)
+        net.get_heads = get_heads_classification
     elif args.model == 'res':
-        net = ResNetCifar(args.depth, args.width, channels=3, classes=10, norm_layer=norm_layer).cuda()
+        net = ResNetCifar(args.depth, args.width, channels=3, classes=10,
+                          norm_layer=norm_layer)
+        net.get_heads = get_heads_classification
+    else:
+        raise Exception(f'Invalid model argument: {args.model}')
+
     net = net.cuda()
-
     setattr(net.__class__, 'bn_stats', {})
-
     return net
 
 
@@ -60,6 +90,16 @@ if __name__ == '__main__':
     parser.add_argument('--min_mom', default=0.005, type=float)
     parser.add_argument('--rotation_type', default='rand')
     parser.add_argument('--level', default=5, type=int)
+
+
+    parser.add_argument('--lr', default=0.01, type=float)
+    parser.add_argument('--epochs', default=1, type=int)
+    parser.add_argument('--patience', default=4, type=int)
+    parser.add_argument('--lr_factor', default=1/3, type=float)
+    parser.add_argument('--verbose', default=True, type=bool)
+    parser.add_argument('--train_val_split', default=0.2, type=float)
+    parser.add_argument('--train_val_split_seed', default=42, type=int)
+    parser.add_argument('--max_unsuccessful_reductions', default=3, type=int)
 
     args: Namespace = parser.parse_args()
     main()
