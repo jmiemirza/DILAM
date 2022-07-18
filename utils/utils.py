@@ -24,6 +24,10 @@ def my_makedir(name):
         pass
 
 
+def make_dirs(path):
+    os.makedirs(path, exist_ok=True)
+
+
 def print_args(opt):
     for arg in vars(opt):
         print('%s %s' % (arg, getattr(opt, arg)))
