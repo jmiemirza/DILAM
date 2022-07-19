@@ -3,6 +3,7 @@ from disc import *
 import argparse
 from argparse import Namespace
 import time
+import baselines
 
 
 def main():
@@ -19,6 +20,10 @@ def main():
 
     net = init_net(args)
 
+    # args.num_samples = 5
+    # common_corruptions = common_corruptions[:2]
+
+
     # disc adaption phase
     # dua(args, net, severity, common_corruptions, save_bn_stats=True)
     # dua(args, net, severity, common_corruptions)
@@ -26,13 +31,15 @@ def main():
     # disc plug and play
     disc(args, net, severity, common_corruptions)
 
-    # baseline_source_only(net, severity, common_corruptions, args)
 
-    # baseline_disjoint(net, severity, common_corruptions, args, 'online')
-    # baseline_disjoint(net, severity, common_corruptions, args, 'offline')
+    # Baselines
+    # baselines.source_only(net, severity, common_corruptions, args)
 
-    # baseline_freezing(net, severity, common_corruptions, args, 'online')
-    # baseline_freezing(net, severity, common_corruptions, args, 'offline')
+    # baselines.disjoint(net, severity, common_corruptions, args, 'online')
+    # baselines.disjoint(net, severity, common_corruptions, args, 'offline')
+
+    # baselines.freezing(net, severity, common_corruptions, args, 'online')
+    # baselines.freezing(net, severity, common_corruptions, args, 'offline')
 
 
     runtime = time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))
