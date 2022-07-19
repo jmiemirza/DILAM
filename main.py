@@ -2,9 +2,11 @@ from dua import *
 from disc import *
 import argparse
 from argparse import Namespace
+import time
 
 
 def main():
+    start_time = time.time()
     cudnn.benchmark = True
     severity = [5]
     common_corruptions = [
@@ -13,13 +15,15 @@ def main():
         'brightness', 'contrast', 'elastic_transform', 'pixelate',
         'jpeg_compression'
     ]
+    dataset_checks(args, common_corruptions)
 
     net = init_net(args)
 
-    # # disc adaption phase
-    # dua(args, net, severity, common_corruptions, True)
+    # disc adaption phase
+    # dua(args, net, severity, common_corruptions, save_bn_stats=True)
+    # dua(args, net, severity, common_corruptions)
 
-    # # disc plug and play
+    # disc plug and play
     disc(args, net, severity, common_corruptions)
 
     # baseline_source_only(net, severity, common_corruptions, args)
@@ -31,15 +35,17 @@ def main():
     # baseline_freezing(net, severity, common_corruptions, args, 'offline')
 
 
+    runtime = time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))
+    print(f'Done! Execution time: {runtime}')
+
+
 
     # TODO
-    #   dua bn stats selection
     #   add dataset name to folder paths
-    #   use download flag once only (reorganize data_loader)
+    #   reorganize data_loader
     #   corruption -> task
     #   globals
     #   logger
-    #   better prints
     #   validation set deepcpy needed?
     #   bn file path
     #   check if model ckpt exists, train if not
