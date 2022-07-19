@@ -51,10 +51,11 @@ def dua(args, net, severity, common_corruptions, save_bn_stats=False):
                 _ = net(inputs_ssh)
                 err_cls = test(teloader, net)[0] * 100
                 err.append(err_cls)
+                if err_cls <= min(err):
+                    save_bn_stats_in_model(net, args.corruption)
             adaptation_error = min(err)
             print(f'Error After Adaptation: {adaptation_error:.1f}')
             all_errors.append(adaptation_error)
-            save_bn_stats_in_model(net, args.corruption)
         print(f'Mean Error after Adaptation {(sum(all_errors) / len(all_errors)):.1f}')
 
     if save_bn_stats:
