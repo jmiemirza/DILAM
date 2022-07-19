@@ -1,7 +1,7 @@
 import torch
 from statistics import mean
 from os.path import exists
-from training import train
+from utils.training import train
 from utils.data_loader import prepare_test_data
 from utils.testing import test
 
