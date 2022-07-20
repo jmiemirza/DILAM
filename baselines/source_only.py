@@ -1,5 +1,5 @@
-import torch
 from statistics import mean
+from torch import load
 from utils.data_loader import prepare_test_data
 from utils.testing import test
 
@@ -8,7 +8,7 @@ def source_only(net, severity, corruptions, args):
     """
         Evaluate Source-Only baseline.
     """
-    net.load_state_dict(torch.load(args.ckpt_path))
+    net.load_state_dict(load(args.ckpt_path))
     net.eval()
     scenario = 'provided checkpoint'
 

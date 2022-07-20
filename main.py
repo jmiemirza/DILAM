@@ -1,9 +1,14 @@
-from dua import *
-from disc import *
+from dua import dua
+from disc import disc
 import argparse
 from argparse import Namespace
 import time
 import baselines
+from torch import nn
+from models.wide_resnet import WideResNet
+from models.resnet_26 import ResNetCifar
+import torch.backends.cudnn as cudnn
+from utils.data_loader import dataset_checks
 
 
 def main():
@@ -44,7 +49,6 @@ def main():
 
     runtime = time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))
     print(f'Done! Execution time: {runtime}')
-
 
 
     # TODO

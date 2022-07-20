@@ -1,6 +1,5 @@
-from utils.rotation import *
-#from .rotation import *
 import torch.nn as nn
+from utils.rotation import *
 
 
 def test(dataloader, model, sslabel=None):

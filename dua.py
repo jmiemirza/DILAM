@@ -1,13 +1,10 @@
 from __future__ import print_function
-from models.resnet_26 import *
 from utils.data_loader import *
-import torch.backends.cudnn as cudnn
 from tqdm import tqdm
 from PIL import Image
 import torchvision.transforms as transforms
 from utils.testing import test
 from utils.rotation import *
-from models.wide_resnet import WideResNet
 
 def dua(args, net, severity, common_corruptions, save_bn_stats=False):
     tr_transform_adapt = transforms.Compose([

@@ -1,6 +1,6 @@
-import torch
 from statistics import mean
 from os.path import exists
+from torch import load
 from utils.training import train
 from utils.data_loader import prepare_test_data
 from utils.testing import test
@@ -23,17 +23,17 @@ def disjoint(net, severity, corruptions, args, scenario='online'):
     for level in severity:
         print(f'Corruption level of severity: {level}')
         all_errors = []
-        net.load_state_dict(torch.load(args.ckpt_path))
+        net.load_state_dict(load(args.ckpt_path))
         for idx, args.corruption in enumerate(corruptions):
             if args.corruption != 'initial':
                 ckpt_path = ckpt_folder + args.corruption + '.pt'
                 if not exists(ckpt_path):
                     print(f'No checkpoint for disjoint Task-{idx} '
                           f'({args.corruption}) - Starting training.')
-                    net.load_state_dict(torch.load(args.ckpt_path))
+                    net.load_state_dict(load(args.ckpt_path))
                     train(net, args, results_path=ckpt_folder)
                 else:
-                    net.load_state_dict(torch.load(ckpt_path))
+                    net.load_state_dict(load(ckpt_path))
             net.eval()
             test_loader = prepare_test_data(args)[1]
             err_cls = test(test_loader, net)[0] * 100

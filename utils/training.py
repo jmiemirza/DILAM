@@ -1,13 +1,13 @@
 from typing import Iterable
-import torch
+from warnings import warn
+from torch import save
 import torch.nn as nn
 import torch.optim as optim
-from utils.data_loader import *
-from utils.testing import test
-from utils.utils import make_dirs
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from itertools import chain
-from warnings import warn
+from utils.data_loader import prepare_train_valid_loaders
+from utils.testing import test
+from utils.utils import make_dirs
 
 
 class ReduceLROnPlateauEarlyStop(ReduceLROnPlateau):
@@ -35,7 +35,7 @@ class ReduceLROnPlateauEarlyStop(ReduceLROnPlateau):
         if epoch is None:
             epoch = self.last_epoch + 1
         else:
-            warn(torch.optim.lr_scheduler.EPOCH_DEPRECATION_WARNING)
+            warn(optim.lr_scheduler.EPOCH_DEPRECATION_WARNING)
         self.last_epoch = epoch
 
         if self.is_better(current, self.best):
@@ -96,7 +96,7 @@ def train(model, args, results_path='checkpoints/', train_heads_only=False):
         err_cls = test(valid_loader, model)[0]
         all_err_cls.append(err_cls)
         if err_cls <= min(all_err_cls):
-            torch.save(model.state_dict(), f'{results_path}{args.corruption}.pt')
+            save(model.state_dict(), f'{results_path}{args.corruption}.pt')
 
         print(('Epoch %d/%d:' % (epoch, args.epochs)).ljust(20) +
               '%.2f' % (err_cls * 100))

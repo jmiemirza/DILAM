@@ -1,9 +1,11 @@
-from dua import *
+from torch import load
+from utils.data_loader import prepare_test_data
+from utils.testing import test
 from statistics import mean
 
 
 def disc(args, net, severity, common_corruptions):
-    ckpt = torch.load(args.ckpt_path)
+    ckpt = load(args.ckpt_path)
     bn_file_name = 'BN-' + net.__class__.__name__ + '-' + args.dataset + '.pt'
     load_bn_stats_file(net, bn_file_name)
     common_corruptions = ['initial'] + common_corruptions
@@ -65,5 +67,5 @@ def load_bn_stats_file(net, file_path):
     """
         Loads a saved state of net.bn_stats attribute, located at file_path.
     """
-    net.bn_stats = torch.load(file_path)
+    net.bn_stats = load(file_path)
 

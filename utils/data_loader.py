@@ -1,10 +1,11 @@
-import torch
-import torchvision.transforms as transforms
-import numpy as np
-from torch.utils.data import DataLoader, Subset
-from torchvision import datasets
 import copy
 from os.path import exists
+from torch import manual_seed, randperm
+from torch.utils.data import DataLoader, Subset
+from torchvision import datasets
+import torchvision.transforms as transforms
+import numpy as np
+
 
 NORM = ((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 
@@ -77,8 +78,8 @@ def prepare_train_valid_loaders(args):
     valid_set.data = copy.deepcopy(train_set_raw)
 
     if args.train_val_split_seed != 0:
-        torch.manual_seed(args.train_val_split_seed)
-    indices = torch.randperm(len(train_set))
+        manual_seed(args.train_val_split_seed)
+    indices = randperm(len(train_set))
     valid_size = round(len(train_set) * args.train_val_split)
     train_set = Subset(train_set, indices[:-valid_size])
     valid_set = Subset(valid_set, indices[-valid_size:])
