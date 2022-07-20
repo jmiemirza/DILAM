@@ -15,7 +15,7 @@ def disjoint(net, severity, corruptions, args, scenario='online'):
     elif scenario == 'offline':
         args.epochs = 150
     args.lr = 0.01
-    ckpt_folder = 'checkpoints/disjoint/' + scenario + '/'
+    ckpt_folder = 'checkpoints/disjoint/' + args.dataset + '/' + scenario + '/'
     ckpt_folder += net.__class__.__name__ + '/'
     corruptions = ['initial'] + corruptions
 

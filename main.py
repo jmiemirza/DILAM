@@ -52,7 +52,6 @@ def main():
 
 
     # TODO
-    #   add dataset name to folder paths
     #   reorganize data_loader
     #   corruption -> task
     #   globals
