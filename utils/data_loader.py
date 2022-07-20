@@ -70,6 +70,12 @@ def prepare_train_valid_loaders(args):
     assert args.train_val_split > 0 and args.train_val_split < 1
 
     train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.corruption}.npy')
+
+    # This currently asumes files generated for level 5 only.
+    # Uncomment the following 2 lines for files containing all levels.
+    # tesize = 50000
+    # train_set_raw = train_set_raw[(args.level - 1) * tesize: args.level * tesize]
+
     train_set = datasets.CIFAR10(root=args.dataroot, transform=tr_transforms,
                                  train=True)
     valid_set = datasets.CIFAR10(root=args.dataroot, transform=te_transforms,
