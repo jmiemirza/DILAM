@@ -14,9 +14,8 @@ def disjoint(net, severity, corruptions, args, scenario='online'):
         args.epochs = 1
     elif scenario == 'offline':
         args.epochs = 150
-    args.lr = 0.01
-    ckpt_folder = 'checkpoints/disjoint/' + args.dataset + '/' + scenario + '/'
-    ckpt_folder += net.__class__.__name__ + '/'
+    ckpt_folder = 'checkpoints/' + args.dataset + '/disjoint/' + scenario
+    ckpt_folder += '/' + net.__class__.__name__ + '/'
     corruptions = ['initial'] + corruptions
 
     print(f'::: Baseline Disjoint ({scenario}) :::')
@@ -28,7 +27,7 @@ def disjoint(net, severity, corruptions, args, scenario='online'):
             if args.corruption != 'initial':
                 ckpt_path = ckpt_folder + args.corruption + '.pt'
                 if not exists(ckpt_path):
-                    print(f'No checkpoint for disjoint Task-{idx} '
+                    print(f'No checkpoint for Disjoint Task-{idx} '
                           f'({args.corruption}) - Starting training.')
                     net.load_state_dict(load(args.ckpt_path))
                     train(net, args, results_path=ckpt_folder)

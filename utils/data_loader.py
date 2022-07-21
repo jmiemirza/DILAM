@@ -1,7 +1,7 @@
 import copy
 from os.path import exists
 from torch import manual_seed, randperm
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Subset, ConcatDataset
 from torchvision import datasets
 import torchvision.transforms as transforms
 import numpy as np
@@ -69,19 +69,18 @@ def prepare_train_valid_loaders(args):
         args.workers = 1
     assert args.train_val_split > 0 and args.train_val_split < 1
 
-    train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.corruption}.npy')
-
-    # This currently asumes files generated for level 5 only.
-    # Uncomment the following 2 lines for files containing all levels.
-    # tesize = 50000
-    # train_set_raw = train_set_raw[(args.level - 1) * tesize: args.level * tesize]
-
     train_set = datasets.CIFAR10(root=args.dataroot, transform=tr_transforms,
                                  train=True)
     valid_set = datasets.CIFAR10(root=args.dataroot, transform=te_transforms,
                                  train=True)
-    train_set.data = train_set_raw
-    valid_set.data = copy.deepcopy(train_set_raw)
+    if args.corruption != 'initial':
+        train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.corruption}.npy')
+        # This currently asumes files generated for level 5 only.
+        # Uncomment the following 2 lines for files containing all levels.
+        # tesize = 50000
+        # train_set_raw = train_set_raw[(args.level - 1) * tesize: args.level * tesize]
+        train_set.data = train_set_raw
+        valid_set.data = copy.deepcopy(train_set_raw)
 
     if args.train_val_split_seed != 0:
         manual_seed(args.train_val_split_seed)
@@ -95,6 +94,34 @@ def prepare_train_valid_loaders(args):
                               shuffle=False, num_workers=args.workers)
 
     return train_loader, valid_loader
+
+
+def prepare_joint_loader(args):
+    train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.corruption}.npy')
+    # This currently asumes files generated for level 5 only.
+    # Uncomment the following 2 lines for files containing all levels.
+    # tesize = 50000
+    # train_set_raw = train_set_raw[(args.level - 1) * tesize: args.level * tesize]
+    train_set = datasets.CIFAR10(root=args.dataroot, transform=tr_transforms,
+                                 train=True)
+    train_set.data = train_set_raw
+
+    test_size = 10000
+    test_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/test/{args.corruption}.npy')
+    test_set_raw = test_set_raw[(args.level - 1) * test_size: args.level * test_size]
+    test_set = datasets.CIFAR10(root=args.dataroot, train=False,
+                                transform=te_transforms)
+    test_set.data = test_set_raw
+
+    joint_set = ConcatDataset([train_set, test_set])
+
+    if not hasattr(args, 'workers'):
+        args.workers = 1
+
+    joint_loader = DataLoader(joint_set, batch_size=args.batch_size, shuffle=True,
+                              num_workers=args.workers)
+
+    return joint_loader
 
 
 def dataset_checks(args, corruptions):

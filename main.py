@@ -1,14 +1,16 @@
-from dua import dua
-from disc import disc
 import argparse
 from argparse import Namespace
 import time
-import baselines
+from os.path import exists
 from torch import nn
+import torch.backends.cudnn as cudnn
+from dua import dua
+from disc import disc
 from models.wide_resnet import WideResNet
 from models.resnet_26 import ResNetCifar
-import torch.backends.cudnn as cudnn
 from utils.data_loader import dataset_checks
+from utils.training import train
+import baselines
 
 
 def main():
@@ -21,9 +23,9 @@ def main():
         'brightness', 'contrast', 'elastic_transform', 'pixelate',
         'jpeg_compression'
     ]
-    dataset_checks(args, common_corruptions)
 
     net = init_net(args)
+    initial_checks(net, args, common_corruptions)
 
     # args.num_samples = 5
     # common_corruptions = common_corruptions[:2]
@@ -34,7 +36,7 @@ def main():
     # dua(args, net, severity, common_corruptions)
 
     # disc plug and play
-    disc(args, net, severity, common_corruptions)
+    # disc(args, net, severity, common_corruptions)
 
 
     # Baselines
@@ -46,20 +48,16 @@ def main():
     # baselines.freezing(net, severity, common_corruptions, args, 'online')
     # baselines.freezing(net, severity, common_corruptions, args, 'offline')
 
+    # baselines.fine_tuning(net, severity, common_corruptions, args, scenario='online')
+    # baselines.fine_tuning(net, severity, common_corruptions, args, scenario='offline')
+
+    # baselines.joint_training(net, severity, common_corruptions, args, scenario='online')
+    # baselines.joint_training(net, severity, common_corruptions, args, scenario='offline')
+
 
     runtime = time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))
     print(f'Done! Execution time: {runtime}')
 
-
-    # TODO
-    #   reorganize data_loader
-    #   corruption -> task
-    #   globals
-    #   logger
-    #   validation set deepcpy needed?
-    #   bn file path
-    #   check if model ckpt exists, train if not
-    #   error handling
 
 
 
@@ -91,6 +89,17 @@ def init_net(args):
     return net
 
 
+def initial_checks(net, args, common_corruptions):
+    dataset_checks(args, common_corruptions)
+
+    if not exists(args.ckpt_path):
+        print('Checkpoint trained on initial task not found - Starting training.')
+        args.corruption = 'initial'
+        args.ckpt_path = 'checkpoints/' + args.dataset
+        train(net, args, args.ckpt_path)
+        print(f'Checkpoint trained on initial task saved at {args.ckpt_path}/initial.pt')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', default='cifar10')
@@ -109,7 +118,8 @@ if __name__ == '__main__':
 
 
     parser.add_argument('--lr', default=0.01, type=float)
-    parser.add_argument('--epochs', default=1, type=int)
+    parser.add_argument('--initial_task_lr', default=1.5242e-06, type=float)
+    parser.add_argument('--epochs', default=150, type=int)
     parser.add_argument('--patience', default=4, type=int)
     parser.add_argument('--lr_factor', default=1/3, type=float)
     parser.add_argument('--verbose', default=True, type=bool)
