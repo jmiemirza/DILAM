@@ -64,7 +64,7 @@ def prepare_train_data(args):
     return trset, trloader
 
 
-def prepare_train_valid_loaders(args):
+def prepare_train_valid_data(args):
     if not hasattr(args, 'workers'):
         args.workers = 1
     assert args.train_val_split > 0 and args.train_val_split < 1
@@ -92,8 +92,7 @@ def prepare_train_valid_loaders(args):
                               shuffle=False, num_workers=args.workers)
     valid_loader = DataLoader(valid_set, batch_size=args.batch_size,
                               shuffle=False, num_workers=args.workers)
-
-    return train_loader, valid_loader
+    return train_set.dataset, train_loader, valid_set.dataset, valid_loader
 
 
 def prepare_joint_loader(args):

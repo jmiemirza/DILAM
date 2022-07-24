@@ -30,7 +30,7 @@ def disjoint(net, severity, corruptions, args, scenario='online'):
                     print(f'No checkpoint for Disjoint Task-{idx} '
                           f'({args.corruption}) - Starting training.')
                     net.load_state_dict(load(args.ckpt_path))
-                    train(net, args, results_path=ckpt_folder)
+                    train(net, args, results_folder_path=ckpt_folder)
                 else:
                     net.load_state_dict(load(ckpt_path))
             net.eval()

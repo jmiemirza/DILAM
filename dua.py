@@ -6,7 +6,8 @@ import torchvision.transforms as transforms
 from utils.testing import test
 from utils.rotation import *
 
-def dua(args, net, severity, common_corruptions, save_bn_stats=False):
+def dua(args, net, severity, common_corruptions, save_bn_stats=False,
+        use_training_data=False):
     tr_transform_adapt = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
@@ -27,13 +28,20 @@ def dua(args, net, severity, common_corruptions, save_bn_stats=False):
             err = []
             print(f'Corruption - {args.corruption} :::: Level - {args.level}')
             net.load_state_dict(ckpt)
-            teset, teloader = prepare_test_data(args)
-            err_cls = test(teloader, net)[0] * 100
+
+            if use_training_data:
+                train_set, _, _, valid_loader = prepare_train_valid_data(args)
+                dataset = train_set
+                loader = valid_loader
+            else:
+                dataset, loader = prepare_test_data(args)
+
+            err_cls = test(loader, net)[0] * 100
             print(f'Error Before Adaptation: {err_cls:.1f}')
 
             for i in tqdm(range(1, args.num_samples + 1)):
                 net.eval()
-                image = Image.fromarray(teset.data[i - 1])
+                image = Image.fromarray(dataset.data[i - 1])
                 mom_new = (mom_pre * decay_factor)
                 for m in net.modules():
                     if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
@@ -46,7 +54,7 @@ def dua(args, net, severity, common_corruptions, save_bn_stats=False):
                 inputs_ssh, labels_ssh = rotate_batch(inputs, 'rand')
                 inputs_ssh, labels_ssh = inputs_ssh.cuda(), labels_ssh.cuda()
                 _ = net(inputs_ssh)
-                err_cls = test(teloader, net)[0] * 100
+                err_cls = test(loader, net)[0] * 100
                 err.append(err_cls)
                 if err_cls <= min(err):
                     save_bn_stats_in_model(net, args.corruption)

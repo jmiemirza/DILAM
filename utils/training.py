@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from itertools import chain
-from utils.data_loader import prepare_train_valid_loaders, prepare_joint_loader
+from utils.data_loader import prepare_train_valid_data, prepare_joint_loader
 from utils.testing import test
 from utils.utils import make_dirs
 
@@ -90,7 +90,7 @@ def train(model, args, results_folder_path='checkpoints/', lr=None,
                                            patience=args.patience,
                                            verbose=args.verbose,
                                            max_unsuccessful_reductions = n)
-    train_loader, valid_loader = prepare_train_valid_loaders(args)
+    _, train_loader, _, valid_loader = prepare_train_valid_data(args)
 
     all_err_cls = []
     for epoch in range(1, args.epochs + 1):
