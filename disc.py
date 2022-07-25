@@ -1,62 +1,65 @@
+from statistics import mean
+import logging
 from torch import load
 from utils.data_loader import prepare_test_data
 from utils.testing import test
-from statistics import mean
+from globals import *
+
+log = logging.getLogger('MAIN.DISC')
 
 
-def disc(args, net, severity, common_corruptions):
+def disc(args, net):
     ckpt = load(args.ckpt_path)
     bn_file_name = 'BN-' + net.__class__.__name__ + '-' + args.dataset + '.pt'
     load_bn_stats_file(net, bn_file_name)
-    common_corruptions = ['initial'] + common_corruptions
+    tasks = ['initial'] + TASKS
 
-    print('::: DISC Plug & Play :::')
-    for args.level in severity:
+    log.info('::: DISC Plug & Play :::')
+    for args.level in SEVERTITIES:
         all_errors = []
-        for idx, args.corruption in enumerate(common_corruptions):
+        for idx, args.task in enumerate(tasks):
             task_errors = []
-            load_bn_stats(net, args.corruption, ckpt)
+            load_bn_stats(net, args.task, ckpt)
             test_loader = prepare_test_data(args)[1]
             err_cls = test(test_loader, net)[0] * 100
-            print(f'Error on Task-{idx} ({args.corruption}): {err_cls:.1f}')
+            log.info(f'Error on Task-{idx} ({args.task}): {err_cls:.1f}')
             all_errors.append(err_cls)
             task_errors.append(err_cls)
 
             # previously seen tasks
             if idx > 0:
-                print('\tPreviously seen tasks:')
+                log.info('\tPreviously seen tasks:')
                 for i in range(0, idx):
-                    load_bn_stats(net, common_corruptions[i], ckpt)
-                    args.corruption = common_corruptions[i]
+                    load_bn_stats(net, tasks[i], ckpt)
+                    args.task = tasks[i]
                     test_loader = prepare_test_data(args)[1]
                     prev_err = test(test_loader, net)[0] * 100
-                    print(f'\tError on Task-{i} ({common_corruptions[i]}): '
-                          f'{prev_err:.1f}')
+                    log.info(f'\tError on Task-{i} ({tasks[i]}): {prev_err:.1f}')
                     task_errors.append(prev_err)
 
                     if i == idx - 1:
-                        print(f'\tMean error over current task '
-                              f'({common_corruptions[idx]}) and previously '
-                              f'seen tasks: {mean(task_errors):.1f}')
+                        log.info(f'\tMean error over current task '
+                                 f'({tasks[idx]}) and previously '
+                                 f'seen tasks: {mean(task_errors):.1f}')
 
             assert mean(task_errors) == mean(all_errors)
 
 
-def load_bn_stats(net, corruption, ckpt=None):
+def load_bn_stats(net, task, ckpt=None):
     """
         Optionally loads a model checkpoint.
         Loads the running estimates for all batch norm layers
-            from net.bn_stats attribute, for a given corruption.
-            Unless the corruption is 'initial', in which case the function
+            from net.bn_stats attribute, for a given task.
+            Unless the task is 'initial', in which case the function
             returns without loading anything.
         Sets network to evaluation mode.
     """
     if ckpt is not None:
         net.load_state_dict(ckpt)
-    if corruption == 'initial':
+    if task == 'initial':
         return
     state_dict = net.state_dict()
-    for layer_name, value in net.bn_stats[corruption].items():
+    for layer_name, value in net.bn_stats[task].items():
         state_dict[layer_name + '.running_mean'] = value['running_mean']
         state_dict[layer_name + '.running_var'] = value['running_var']
     net.load_state_dict(state_dict)

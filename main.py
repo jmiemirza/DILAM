@@ -1,6 +1,9 @@
 import argparse
 from argparse import Namespace
+import sys
 import time
+import logging
+import logging.config
 from os.path import exists
 from torch import nn
 import torch.backends.cudnn as cudnn
@@ -11,52 +14,52 @@ from models.resnet_26 import ResNetCifar
 from utils.data_loader import dataset_checks
 from utils.training import train
 import baselines
+from globals import LOGGER_CFG
+
+
+logging.config.dictConfig(LOGGER_CFG)
+log = logging.getLogger('MAIN')
 
 
 def main():
     start_time = time.time()
     cudnn.benchmark = True
-    severity = [5]
-    common_corruptions = [
-        'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur',
-        'glass_blur', 'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
-        'brightness', 'contrast', 'elastic_transform', 'pixelate',
-        'jpeg_compression'
-    ]
+
+    log.debug('-- hi --')
 
     net = init_net(args)
-    initial_checks(net, args, common_corruptions)
-
-    # args.num_samples = 5
-    # common_corruptions = common_corruptions[:2]
+    initial_checks(net, args)
 
 
     # disc adaption phase
-    # dua(args, net, severity, common_corruptions, save_bn_stats=True)
-    # dua(args, net, severity, common_corruptions)
+    # args.num_samples = 5
+    # args.num_samples = 320
+    # args.batch_size = 16
+    # dua(args, net, save_bn_stats=True, use_training_data=True)
+    # dua(args, net, save_bn_stats=False, use_training_data=True)
 
     # disc plug and play
-    # disc(args, net, severity, common_corruptions)
+    # disc(args, net)
 
 
     # Baselines
-    # baselines.source_only(net, severity, common_corruptions, args)
+    # baselines.source_only(net, args)
 
-    # baselines.disjoint(net, severity, common_corruptions, args, 'online')
-    # baselines.disjoint(net, severity, common_corruptions, args, 'offline')
+    # baselines.disjoint(net, args, 'online')
+    # baselines.disjoint(net, args, 'offline')
 
-    # baselines.freezing(net, severity, common_corruptions, args, 'online')
-    # baselines.freezing(net, severity, common_corruptions, args, 'offline')
+    # baselines.freezing(net, args, 'online')
+    # baselines.freezing(net, args, 'offline')
 
-    # baselines.fine_tuning(net, severity, common_corruptions, args, scenario='online')
-    # baselines.fine_tuning(net, severity, common_corruptions, args, scenario='offline')
+    # baselines.fine_tuning(net, args, scenario='online')
+    # baselines.fine_tuning(net, args, scenario='offline')
 
-    # baselines.joint_training(net, severity, common_corruptions, args, scenario='online')
-    # baselines.joint_training(net, severity, common_corruptions, args, scenario='offline')
+    # baselines.joint_training(net, args, scenario='online')
+    # baselines.joint_training(net, args, scenario='offline')
 
 
     runtime = time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))
-    print(f'Done! Execution time: {runtime}')
+    log.info(f'Exection finished in {runtime}')
 
 
 
@@ -89,15 +92,25 @@ def init_net(args):
     return net
 
 
-def initial_checks(net, args, common_corruptions):
-    dataset_checks(args, common_corruptions)
+def initial_checks(net, args):
+    log.info('Running initial checks.')
+    dataset_checks(args)
 
     if not exists(args.ckpt_path):
-        print('Checkpoint trained on initial task not found - Starting training.')
-        args.corruption = 'initial'
+        log.info('Checkpoint trained on initial task not found - Starting training.')
+        args.task = 'initial'
         args.ckpt_path = 'checkpoints/' + args.dataset
         train(net, args, args.ckpt_path)
-        print(f'Checkpoint trained on initial task saved at {args.ckpt_path}/initial.pt')
+        log.info(f'Checkpoint trained on initial task saved at {args.ckpt_path}/initial.pt')
+
+
+# Log uncaught exceptions, that aren't keyboard interrupts
+def handle_exception(exception_type, value, traceback):
+    if issubclass(exception_type, KeyboardInterrupt):
+        sys.__excepthook__(exception_type, value, traceback)
+        return
+    log.exception('Exception occured:', exc_info=(exception_type, value, traceback))
+sys.excepthook = handle_exception
 
 
 if __name__ == '__main__':

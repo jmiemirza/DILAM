@@ -1,11 +1,14 @@
 import copy
+import logging
 from os.path import exists
 from torch import manual_seed, randperm
 from torch.utils.data import DataLoader, Subset, ConcatDataset
 from torchvision import datasets
 import torchvision.transforms as transforms
 import numpy as np
+from globals import *
 
+log = logging.getLogger('MAIN.DATA')
 
 NORM = ((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
 
@@ -19,30 +22,23 @@ tr_transforms = transforms.Compose([transforms.RandomCrop(32, padding=4),
                                     transforms.Normalize(*NORM)
                                     ])
 
-common_corruptions = ['cifar_new', 'gaussian_noise', 'original', 'shot_noise', 'impulse_noise', 'defocus_blur',
-                      'glass_blur',
-                      'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog',
-                      'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
-
-valid_datasets = ['cifar10']
-
 
 def prepare_test_data(args):
     if args.dataset == 'cifar10':
         tesize = 10000
-        if not hasattr(args, 'corruption') or args.corruption == 'initial':
-            # print('Test on the original test set')
+        if not hasattr(args, 'task') or args.task == 'initial':
+            # log.debug('Test on the original test set')
             teset = datasets.CIFAR10(root=args.dataroot, train=False,
                                      transform=te_transforms)
-        elif args.corruption in common_corruptions:
-            # print('Test on %s level %d' % (args.corruption, args.level))
-            teset_raw = np.load(args.dataroot + f'/CIFAR-10-C/test/{args.corruption}.npy')
+        elif args.task in TASKS:
+            # log.debug('Test on %s level %d' % (args.task, args.level))
+            teset_raw = np.load(args.dataroot + f'/CIFAR-10-C/test/{args.task}.npy')
             teset_raw = teset_raw[(args.level - 1) * tesize: args.level * tesize]
             teset = datasets.CIFAR10(root=args.dataroot, train=False,
                                      transform=te_transforms)
             teset.data = teset_raw
         else:
-            raise Exception('Corruption not found!')
+            raise Exception('Task not found!')
 
     if not hasattr(args, 'workers'):
         args.workers = 1
@@ -52,7 +48,7 @@ def prepare_test_data(args):
 
 
 def prepare_train_data(args):
-    print('Preparing data...')
+    log.debug('Preparing original training data...')
     if args.dataset == 'cifar10':
         trset = datasets.CIFAR10(root=args.dataroot, transform=tr_transforms,
                                  train=True)
@@ -65,6 +61,7 @@ def prepare_train_data(args):
 
 
 def prepare_train_valid_data(args):
+    log.debug(f'Preparing training and validation data for task {args.task}')
     if not hasattr(args, 'workers'):
         args.workers = 1
     assert args.train_val_split > 0 and args.train_val_split < 1
@@ -73,8 +70,8 @@ def prepare_train_valid_data(args):
                                  train=True)
     valid_set = datasets.CIFAR10(root=args.dataroot, transform=te_transforms,
                                  train=True)
-    if args.corruption != 'initial':
-        train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.corruption}.npy')
+    if args.task != 'initial':
+        train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.task}.npy')
         # This currently asumes files generated for level 5 only.
         # Uncomment the following 2 lines for files containing all levels.
         # tesize = 50000
@@ -96,7 +93,8 @@ def prepare_train_valid_data(args):
 
 
 def prepare_joint_loader(args):
-    train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.corruption}.npy')
+    log.debug(f'Preparing joint (training + test) data for task {args.task}')
+    train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.task}.npy')
     # This currently asumes files generated for level 5 only.
     # Uncomment the following 2 lines for files containing all levels.
     # tesize = 50000
@@ -106,7 +104,7 @@ def prepare_joint_loader(args):
     train_set.data = train_set_raw
 
     test_size = 10000
-    test_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/test/{args.corruption}.npy')
+    test_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/test/{args.task}.npy')
     test_set_raw = test_set_raw[(args.level - 1) * test_size: args.level * test_size]
     test_set = datasets.CIFAR10(root=args.dataroot, train=False,
                                 transform=te_transforms)
@@ -123,44 +121,45 @@ def prepare_joint_loader(args):
     return joint_loader
 
 
-def dataset_checks(args, corruptions):
-    if not args.dataset in valid_datasets:
+def dataset_checks(args):
+    if not args.dataset in VALID_DATASETS:
         raise Exception(f'Invalid dataset argument: {args.dataset}')
 
     error = False
     if args.dataset == 'cifar10':
-        error = check_cifar_ten_c(args, corruptions)
+        error = check_cifar_ten_c(args)
 
     if error:
+        log.critical('Dataset checks unsuccessful!')
         raise Exception('Dataset checks unsuccessful!')
     else:
-        print('Dataset checks successful!')
+        log.info('Dataset checks successful!')
 
 
-def check_cifar_ten_c(args, corruptions):
+def check_cifar_ten_c(args):
     datasets.CIFAR10(root=args.dataroot, download=True)
     error = False
     test_set_path = args.dataroot + '/CIFAR-10-C/test/'
     train_set_path = args.dataroot + '/CIFAR-10-C/train/'
     if not exists(test_set_path):
         error = True
-        print(f'CIFAR-10-C test set not found. Expected at {test_set_path}')
+        log.error(f'CIFAR-10-C test set not found. Expected at {test_set_path}')
     if not exists(train_set_path):
         error = True
-        print(f'CIFAR-10-C training set not found. Expected at {train_set_path}')
+        log.error(f'CIFAR-10-C training set not found. Expected at {train_set_path}')
     missing_files = []
-    for corruption in corruptions:
-        test_samples = test_set_path + f'{corruption}.npy'
-        train_samples = train_set_path + f'{corruption}.npy'
+    for task in TASKS:
+        test_samples = test_set_path + f'{task}.npy'
+        train_samples = train_set_path + f'{task}.npy'
         if not exists(test_samples):
             missing_files.append(test_samples)
         if not exists(train_samples):
             missing_files[:0] = [train_samples]
     if len(missing_files):
         error = True
-        print('Missing the following CIFAR-10-C samples:')
+        log.error('Missing the following CIFAR-10-C samples:')
         for f_path in missing_files:
-            print(f_path)
+            log.error(f_path)
     return error
 
 

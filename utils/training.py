@@ -1,5 +1,6 @@
 from typing import Iterable
 from warnings import warn
+import logging
 from torch import save
 import torch.nn as nn
 import torch.optim as optim
@@ -9,6 +10,7 @@ from utils.data_loader import prepare_train_valid_data, prepare_joint_loader
 from utils.testing import test
 from utils.utils import make_dirs
 
+log = logging.getLogger('TRAINING')
 
 class ReduceLROnPlateauEarlyStop(ReduceLROnPlateau):
     """
@@ -46,7 +48,7 @@ class ReduceLROnPlateauEarlyStop(ReduceLROnPlateau):
             self.num_bad_epochs += 1
             if self.consecutive_lr_reductions >= self.max_unsuccessful_reductions:
                 if self.verbose:
-                    print("Early stopping criteria reached!")
+                    log.info("Early stopping criteria reached!")
                 return False
 
         if self.in_cooldown:
@@ -99,14 +101,13 @@ def train(model, args, results_folder_path='checkpoints/', lr=None,
         err_cls = test(valid_loader, model)[0]
         all_err_cls.append(err_cls)
         if err_cls <= min(all_err_cls):
-            save(model.state_dict(), f'{results_folder_path}{args.corruption}.pt')
+            save(model.state_dict(), f'{results_folder_path}{args.task}.pt')
 
-        print(('Epoch %d/%d:' % (epoch, args.epochs)).ljust(20) +
+        log.info(('Epoch %d/%d:' % (epoch, args.epochs)).ljust(20) +
               '%.2f' % (err_cls * 100))
 
         if not scheduler.step(err_cls):
-            if args.verbose:
-                print("Finished training")
+            log.info("Finished training")
             return
 
 
@@ -120,7 +121,7 @@ def train_one_epoch(model, epoch, optimizer, train_loader, criterion):
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-    print(f'Epoch {epoch} avg loss per batch: {total_loss / (batch_idx + 1):.4f}')
+    log.info(f'Epoch {epoch} avg loss per batch: {total_loss / (batch_idx + 1):.4f}')
 
 
 def train_joint(model, args, results_folder_path='checkpoints/'):
@@ -138,6 +139,7 @@ def train_joint(model, args, results_folder_path='checkpoints/'):
                                            max_unsuccessful_reductions = n)
     joint_loader = prepare_joint_loader(args)
 
+    all_loss_per_batch = []
     for epoch in range(1, args.epochs + 1):
         model.train()
 
@@ -152,9 +154,13 @@ def train_joint(model, args, results_folder_path='checkpoints/'):
             total_loss += loss.item()
 
         loss_per_batch = total_loss / (batch_idx + 1)
-        print(f'Epoch {epoch} avg loss per batch: {loss_per_batch * 100:.4f}')
+        log.info(f'Epoch {epoch} avg loss per batch: {loss_per_batch * 100:.4f}')
+
+        all_loss_per_batch.append(loss_per_batch)
+        if loss_per_batch <= min(all_loss_per_batch):
+            save(model.state_dict(), f'{results_folder_path}{args.task}.pt')
 
         if not scheduler.step(loss_per_batch):
-            print("Finished training")
+            log.info("Finished training")
             return
 
