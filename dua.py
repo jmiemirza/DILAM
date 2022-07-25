@@ -5,7 +5,7 @@ from PIL import Image
 import torchvision.transforms as transforms
 from utils.testing import test
 from utils.rotation import *
-from globals import *
+from globals import TASKS, SEVERTITIES
 
 log = logging.getLogger('MAIN.DUA')
 
@@ -85,9 +85,11 @@ def save_bn_stats_in_model(net, task):
             }
 
 
-def save_bn_stats_to_file(net, dataset_str=None):
+def save_bn_stats_to_file(net, dataset_str=None, file_name=None):
     """
         Saves net.bn_stats content to a file.
     """
-    file_name = 'BN-' + net.__class__.__name__ + '-' + dataset_str + '.pt'
-    torch.save(net.bn_stats, file_name)
+    ckpt_folder = 'checkpoints/' + dataset_str + '/' + net.__class__.__name__ + '/'
+    if not file_name:
+        file_name = 'BN_stats.pt'
+    torch.save(net.bn_stats, ckpt_folder + file_name)

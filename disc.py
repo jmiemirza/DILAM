@@ -1,17 +1,26 @@
 from statistics import mean
 import logging
+from os.path import exists
 from torch import load
 from utils.data_loader import prepare_test_data
 from utils.testing import test
-from globals import *
+from globals import TASKS, SEVERTITIES
 
 log = logging.getLogger('MAIN.DISC')
 
 
-def disc(args, net):
+def disc(args, net, bn_file_name=None):
     ckpt = load(args.ckpt_path)
-    bn_file_name = 'BN-' + net.__class__.__name__ + '-' + args.dataset + '.pt'
-    load_bn_stats_file(net, bn_file_name)
+
+    bn_file_path = 'checkpoints/' + args.dataset + '/' + net.__class__.__name__ + '/'
+    if not bn_file_name:
+        bn_file_name = 'BN_stats.pt'
+    bn_file_path += bn_file_name
+    if exists(bn_file_path):
+        load_bn_stats_file(net, bn_file_path)
+    elif not net.bn_stats.get(TASKS[0]):
+        raise Exception('Could not find BN stats')
+
     tasks = ['initial'] + TASKS
 
     log.info('::: DISC Plug & Play :::')
