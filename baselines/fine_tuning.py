@@ -18,8 +18,8 @@ def fine_tuning(net, args, scenario='online'):
         args.epochs = 1
     elif scenario == 'offline':
         args.epochs = 150
-    ckpt_folder = 'checkpoints/' + args.dataset + '/fine_tuning/' + scenario
-    ckpt_folder += '/' + net.__class__.__name__ + '/'
+    ckpt_folder = 'checkpoints/' + args.dataset + '/' + net.__class__.__name__
+    ckpt_folder += '/fine_tuning/' + scenario + '/'
 
     log.info(f'::: Baseline Fine-Tuning ({scenario}) :::')
     for level in SEVERTITIES:
