@@ -54,8 +54,8 @@ def dua(args, net, save_bn_stats=False, use_training_data=False):
                 inputs = [(tr_transform_adapt(image)) for _ in range(64)]
                 inputs = torch.stack(inputs)
                 inputs = inputs.cuda()
-                inputs_ssh, labels_ssh = rotate_batch(inputs, 'rand')
-                inputs_ssh, labels_ssh = inputs_ssh.cuda(), labels_ssh.cuda()
+                inputs_ssh, _ = rotate_batch(inputs, 'rand')
+                inputs_ssh = inputs_ssh.cuda()
                 _ = net(inputs_ssh)
                 err_cls = test(loader, net)[0] * 100
                 err.append(err_cls)

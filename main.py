@@ -39,7 +39,7 @@ def main():
     # dua(args, net, save_bn_stats=False, use_training_data=True)
 
     # disc plug and play
-    # disc(args, net)
+    disc(args, net)
 
 
     # Baselines
