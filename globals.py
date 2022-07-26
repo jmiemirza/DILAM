@@ -10,7 +10,7 @@ TASKS = [
     'jpeg_compression'
 ]
 
-TASKS = TASKS[:2]
+# TASKS = TASKS[:2]
 
 LOGGER_CFG = {
     'version': 1,
