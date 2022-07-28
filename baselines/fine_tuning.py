@@ -5,6 +5,7 @@ from torch import load
 from utils.training import train
 from utils.data_loader import prepare_test_data
 from utils.testing import test
+from utils.results_manager import ResultsManager
 from globals import TASKS, SEVERTITIES
 
 log = logging.getLogger('BASELINE.FINE_TUNING')
@@ -20,16 +21,19 @@ def fine_tuning(net, args, scenario='online'):
         args.epochs = 150
     ckpt_folder = 'checkpoints/' + args.dataset + '/' + net.__class__.__name__
     ckpt_folder += '/fine_tuning/' + scenario + '/'
+    results = ResultsManager()
 
     log.info(f'::: Baseline Fine-Tuning ({scenario}) :::')
     for level in SEVERTITIES:
         log.info(f'Corruption level of severity: {level}')
+        args.task = 'initial'
         all_errors = []
         net.load_state_dict(load(args.ckpt_path))
         net.eval()
         test_loader = prepare_test_data(args)[1]
         err_cls = test(test_loader, net)[0] * 100
         all_errors.append(err_cls)
+        results.add_result('Fine-Tuning', args.task, err_cls, scenario)
         log.info(f'Error on initial task: {err_cls:.2f}')
         for idx, args.task in enumerate(TASKS):
             ckpt_path = ckpt_folder + args.task + '.pt'
@@ -47,4 +51,5 @@ def fine_tuning(net, args, scenario='online'):
             log.info(f'Error on Task-{idx + 1} ({args.task}): {err_cls:.1f}')
             log.info(f'Mean error over current task ({args.task}) '
                      f'and previously seen tasks: {mean(all_errors):.2f}')
+            results.add_result('Fine-Tuning', args.task, mean(all_errors), scenario)
 

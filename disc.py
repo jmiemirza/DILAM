@@ -4,12 +4,18 @@ from os.path import exists
 from torch import load
 from utils.data_loader import prepare_test_data
 from utils.testing import test
+from dua import dua
+from utils.results_manager import ResultsManager
 from globals import TASKS, SEVERTITIES
 
 log = logging.getLogger('MAIN.DISC')
 
 
-def disc(args, net, bn_file_name=None):
+def disc_adaption(args, net, save_bn_stats=False, use_training_data=True):
+    dua(args, net, save_bn_stats, use_training_data)
+
+
+def disc_plug_and_play(args, net, bn_file_name=None):
     ckpt = load(args.ckpt_path)
 
     bn_file_path = 'checkpoints/' + args.dataset + '/' + net.__class__.__name__ + '/'
@@ -22,6 +28,7 @@ def disc(args, net, bn_file_name=None):
         raise Exception('Could not find BN stats')
 
     tasks = ['initial'] + TASKS
+    results = ResultsManager()
 
     log.info('::: DISC Plug & Play :::')
     for args.level in SEVERTITIES:
@@ -51,7 +58,10 @@ def disc(args, net, bn_file_name=None):
                                  f'({tasks[idx]}) and previously '
                                  f'seen tasks: {mean(task_errors):.1f}')
 
-            assert mean(task_errors) == mean(all_errors)
+            if mean(task_errors) != mean(all_errors):
+                log.error('Mean Error is not equal to mean error of previously seen tasks.')
+            results.add_result('DISC', tasks[idx], mean(all_errors), 'online')
+            results.add_result('DISC', tasks[idx], mean(all_errors), 'offline')
 
 
 def load_bn_stats(net, task, ckpt=None):

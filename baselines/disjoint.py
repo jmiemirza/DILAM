@@ -5,6 +5,7 @@ from torch import load
 from utils.training import train
 from utils.data_loader import prepare_test_data
 from utils.testing import test
+from utils.results_manager import ResultsManager
 from globals import TASKS, SEVERTITIES
 
 log = logging.getLogger('BASELINE.DISJOINT')
@@ -21,6 +22,7 @@ def disjoint(net, args, scenario='online'):
     ckpt_folder = 'checkpoints/' + args.dataset + '/' + net.__class__.__name__
     ckpt_folder += '/disjoint/' + scenario + '/'
     tasks = ['initial'] + TASKS
+    results = ResultsManager()
 
     log.info(f'::: Baseline Disjoint ({scenario}) :::')
     for level in SEVERTITIES:
@@ -44,4 +46,5 @@ def disjoint(net, args, scenario='online'):
             log.info(f'Error on Task-{idx} ({args.task}): {err_cls:.1f}')
             log.info(f'Mean error over current task ({args.task}) '
                      f'and previously seen tasks: {mean(all_errors):.2f}')
+            results.add_result('Disjoint', args.task, mean(all_errors), scenario)
 

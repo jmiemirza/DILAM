@@ -7,13 +7,13 @@ import logging.config
 from os.path import exists
 from torch import nn
 import torch.backends.cudnn as cudnn
-from dua import dua
-from disc import disc
+from disc import disc_plug_and_play, disc_adaption
 from models.wide_resnet import WideResNet
 from models.resnet_26 import ResNetCifar
 from utils.data_loader import dataset_checks
 from utils.training import train
 import baselines
+from utils.results_manager import ResultsManager
 from globals import LOGGER_CFG
 
 
@@ -29,17 +29,21 @@ def main():
 
     net = init_net(args)
     initial_checks(net, args)
+    results = ResultsManager()
 
 
     # disc adaption phase
     # args.num_samples = 5
     # args.num_samples = 320
     # args.batch_size = 16
-    # dua(args, net, save_bn_stats=True, use_training_data=True)
-    # dua(args, net, save_bn_stats=False, use_training_data=True)
+    # args.initial_task_lr = 0.001
 
-    # disc plug and play
-    disc(args, net)
+    disc_adaption(args, net)
+    disc_plug_and_play(args, net)
+
+    # results.save_to_file(file_name='disc_results.pkl')
+    # results.load_from_file(file_name='disc_results.pkl')
+
 
 
     # Baselines
@@ -56,6 +60,11 @@ def main():
 
     # baselines.joint_training(net, args, scenario='online')
     # baselines.joint_training(net, args, scenario='offline')
+
+
+    results.print_summary()
+    results.plot_scenario_summary('online')
+    results.save_to_file(file_name='results_NEWckpts.pkl')
 
 
     runtime = time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))

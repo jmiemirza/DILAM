@@ -3,6 +3,7 @@ import logging
 from torch import load
 from utils.data_loader import prepare_test_data
 from utils.testing import test
+from utils.results_manager import ResultsManager
 from globals import TASKS, SEVERTITIES
 
 log = logging.getLogger('BASELINE.SOURCE_ONLY')
@@ -15,6 +16,7 @@ def source_only(net, args):
     net.load_state_dict(load(args.ckpt_path))
     net.eval()
     scenario = 'provided checkpoint'
+    results = ResultsManager()
 
     tasks = ['initial'] + TASKS
 
@@ -29,4 +31,6 @@ def source_only(net, args):
             log.info(f'Error on Task-{idx} ({args.task}): {err_cls:.1f}')
             log.info(f'Mean error over current task ({args.task}) '
                      f'and previously seen tasks: {mean(all_errors):.2f}')
+            results.add_result('Source-Only', args.task, mean(all_errors), 'online')
+            results.add_result('Source-Only', args.task, mean(all_errors), 'offline')
 
