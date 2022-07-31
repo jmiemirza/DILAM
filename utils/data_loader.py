@@ -91,7 +91,7 @@ def prepare_train_valid_data(args):
                               shuffle=False, num_workers=args.workers)
     return train_set.dataset, train_loader, valid_set.dataset, valid_loader
 
-
+# TODO
 def prepare_joint_loader(args):
     log.debug(f'Preparing joint (training + test) data for task {args.task}')
     train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.task}.npy')

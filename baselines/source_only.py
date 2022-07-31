@@ -21,8 +21,8 @@ def source_only(net, args):
     tasks = ['initial'] + TASKS
 
     log.info(f'::: Baseline Source-Only ({scenario}) :::')
-    for level in SEVERTITIES:
-        log.info(f'Corruption level of severity: {level}')
+    for args.level in SEVERTITIES:
+        log.info(f'Corruption level of severity: {args.level}')
         all_errors = []
         for idx, args.task in enumerate(tasks):
             test_loader = prepare_test_data(args)[1]

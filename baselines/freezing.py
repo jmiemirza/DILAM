@@ -1,7 +1,7 @@
 from statistics import mean
 from os.path import exists
 import logging
-from torch import load
+from torch import load, save
 from utils.training import train
 from utils.data_loader import prepare_test_data
 from utils.testing import test
@@ -23,33 +23,47 @@ def freezing(net, args, scenario='online'):
     ckpt_folder += '/freezing/' + scenario + '/'
     results = ResultsManager()
 
-    log.info(f'::: Baseline Freezing ({scenario}) :::')
-    for level in SEVERTITIES:
-        log.info(f'Corruption level of severity: {level}')
-        args.task = 'initial'
-        all_errors = []
-        net.load_state_dict(load(args.ckpt_path))
-        net.eval()
-        test_loader = prepare_test_data(args)[1]
-        err_cls = test(test_loader, net)[0] * 100
-        all_errors.append(err_cls)
-        results.add_result('Freezing', args.task, err_cls, scenario)
-        log.info(f'Error on initial task: {err_cls:.2f}')
-        for idx, args.task in enumerate(TASKS):
-            ckpt_path = ckpt_folder + args.task + '.pt'
-            if not exists(ckpt_path):
-                log.info(f'No checkpoint for Freezing Task-{idx + 1} '
-                         f'({args.task}) - Starting training.')
-                train(net, args, results_folder_path=ckpt_folder,
-                      lr=args.initial_task_lr, train_heads_only=True)
-            else:
-                net.load_state_dict(load(ckpt_path))
-            net.eval()
-            test_loader = prepare_test_data(args)[1]
-            err_cls = test(test_loader, net)[0] * 100
-            all_errors.append(err_cls)
-            log.info(f'Error on Task-{idx + 1} ({args.task}): {err_cls:.1f}')
-            log.info(f'Mean error over current task ({args.task}) '
-                     f'and previously seen tasks: {mean(all_errors):.2f}')
-            results.add_result('Freezing', args.task, mean(all_errors), scenario)
+    tasks = ['initial'] + TASKS
+    net.load_state_dict(load(args.ckpt_path))
+    save_initial_task_head(net, ckpt_folder)
 
+    log.info(f'::: Baseline Freezing ({scenario}) :::')
+    for args.level in SEVERTITIES:
+        log.info(f'Corruption level of severity: {args.level}')
+        for idx, args.task in enumerate(tasks):
+            log.info(f'Start evaluation for Task-{idx} ({args.task})')
+            current_errors = []
+
+            for i in range(0, idx +1):
+                args.task = tasks[i]
+                setup_net(net, args, ckpt_folder, idx)
+                test_loader = prepare_test_data(args)[1]
+                err_cls = test(test_loader, net)[0] * 100
+                current_errors.append(err_cls)
+                log.info(f'\tError on Task-{i} ({tasks[i]}): {err_cls:.2f}')
+
+                if i == idx:
+                    mean_error = mean(current_errors)
+                    log.info(f'\tMean error over current task ({tasks[idx]}) '
+                             f'and previously seen tasks: {mean_error:.2f}')
+                    results.add_result('Freezing', tasks[idx], mean_error, scenario)
+
+
+def setup_net(net, args, ckpt_folder, idx):
+    ckpt_path = ckpt_folder + args.task + '.pt'
+    if not exists(ckpt_path):
+        log.info(f'No checkpoint for Freezing Task-{idx} '
+                 f'({args.task}) - Starting training.')
+        net.load_state_dict(load(args.ckpt_path))
+        train(net, args, results_folder_path=ckpt_folder,
+              lr=args.initial_task_lr, train_heads_only=True)
+    else:
+        # TODO multi layer heads
+        net.get_heads().load_state_dict(load(ckpt_path))
+    net.eval()
+
+
+def save_initial_task_head(net, ckpt_folder):
+    ckpt_path = ckpt_folder + 'initial.pt'
+    save(net.get_heads().state_dict(), ckpt_path)
+    net.eval()

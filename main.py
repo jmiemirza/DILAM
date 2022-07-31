@@ -38,12 +38,11 @@ def main():
     # args.batch_size = 16
     # args.initial_task_lr = 0.001
 
-    disc_adaption(args, net)
-    disc_plug_and_play(args, net)
+    # disc_adaption(args, net)
+    # disc_plug_and_play(args, net)
 
     # results.save_to_file(file_name='disc_results.pkl')
     # results.load_from_file(file_name='disc_results.pkl')
-
 
 
     # Baselines
@@ -52,19 +51,28 @@ def main():
     # baselines.disjoint(net, args, 'online')
     # baselines.disjoint(net, args, 'offline')
 
+
+    # results.load_from_file(file_name='123_res.pkl')
+
     # baselines.freezing(net, args, 'online')
     # baselines.freezing(net, args, 'offline')
 
+    # results.load_from_file(file_name='1234_res.pkl')
+
     # baselines.fine_tuning(net, args, scenario='online')
     # baselines.fine_tuning(net, args, scenario='offline')
+
+    # results.load_from_file(file_name='12345_res.pkl')
 
     # baselines.joint_training(net, args, scenario='online')
     # baselines.joint_training(net, args, scenario='offline')
 
 
+    # print(results.results)
     results.print_summary()
+    # results.plot_summary()
     results.plot_scenario_summary('online')
-    results.save_to_file(file_name='results_NEWckpts.pkl')
+    # results.save_to_file(file_name='123456_res.pkl')
 
 
     runtime = time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))
@@ -82,17 +90,18 @@ def init_net(args):
             return nn.GroupNorm(args.group_norm, planes)
         norm_layer = gn_helper
 
-    def get_heads_classification():
-        layers = [m for m in net.modules()]
-        return layers[-1]
+    def get_heads_classification(self):
+        for m in self.modules():
+            pass
+        return m
 
     if args.model == 'wrn':
         net = WideResNet(widen_factor=2, depth=40, num_classes=10)
-        net.get_heads = get_heads_classification
+        WideResNet.get_heads = get_heads_classification
     elif args.model == 'res':
         net = ResNetCifar(args.depth, args.width, channels=3, classes=10,
                           norm_layer=norm_layer)
-        net.get_heads = get_heads_classification
+        ResNetCifar.get_heads = get_heads_classification
     else:
         raise Exception(f'Invalid model argument: {args.model}')
 

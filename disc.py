@@ -32,36 +32,25 @@ def disc_plug_and_play(args, net, bn_file_name=None):
 
     log.info('::: DISC Plug & Play :::')
     for args.level in SEVERTITIES:
-        all_errors = []
+        log.info(f'Corruption level of severity: {args.level}')
         for idx, args.task in enumerate(tasks):
-            task_errors = []
-            load_bn_stats(net, args.task, ckpt)
-            test_loader = prepare_test_data(args)[1]
-            err_cls = test(test_loader, net)[0] * 100
-            log.info(f'Error on Task-{idx} ({args.task}): {err_cls:.1f}')
-            all_errors.append(err_cls)
-            task_errors.append(err_cls)
+            log.info(f'Start evaluation for Task-{idx} ({args.task})')
+            current_errors = []
 
-            # previously seen tasks
-            if idx > 0:
-                log.info('\tPreviously seen tasks:')
-                for i in range(0, idx):
-                    load_bn_stats(net, tasks[i], ckpt)
-                    args.task = tasks[i]
-                    test_loader = prepare_test_data(args)[1]
-                    prev_err = test(test_loader, net)[0] * 100
-                    log.info(f'\tError on Task-{i} ({tasks[i]}): {prev_err:.1f}')
-                    task_errors.append(prev_err)
+            for i in range(0, idx + 1):
+                args.task = tasks[i]
+                load_bn_stats(net, args.task, ckpt)
+                test_loader = prepare_test_data(args)[1]
+                err_cls = test(test_loader, net)[0] * 100
+                current_errors.append(err_cls)
+                log.info(f'\tError on Task-{i} ({tasks[i]}): {err_cls:.2f}')
 
-                    if i == idx - 1:
-                        log.info(f'\tMean error over current task '
-                                 f'({tasks[idx]}) and previously '
-                                 f'seen tasks: {mean(task_errors):.1f}')
-
-            if mean(task_errors) != mean(all_errors):
-                log.error('Mean Error is not equal to mean error of previously seen tasks.')
-            results.add_result('DISC', tasks[idx], mean(all_errors), 'online')
-            results.add_result('DISC', tasks[idx], mean(all_errors), 'offline')
+                if i == idx:
+                    mean_error = mean(current_errors)
+                    log.info(f'Mean error over current task ({tasks[i]}) '
+                             f'and previously seen tasks: {mean_error:.2f}')
+                    results.add_result('DISC', tasks[i], mean_error, 'online')
+                    results.add_result('DISC', tasks[i], mean_error, 'offline')
 
 
 def load_bn_stats(net, task, ckpt=None):

@@ -97,11 +97,21 @@ def train(model, args, results_folder_path='checkpoints/', lr=None,
     all_err_cls = []
     for epoch in range(1, args.epochs + 1):
         model.train()
+
+        if train_heads_only: # freeze BN running estimates
+            for m in model.modules():
+                if isinstance(m, nn.modules.batchnorm._BatchNorm):
+                    m.eval()
+
         train_one_epoch(model, epoch, optimizer, train_loader, criterion)
         err_cls = test(valid_loader, model)[0]
         all_err_cls.append(err_cls)
         if err_cls <= min(all_err_cls):
-            save(model.state_dict(), f'{results_folder_path}{args.task}.pt')
+            if train_heads_only:
+                # TODO multi layer heads
+                save(model.get_heads().state_dict(), f'{results_folder_path}{args.task}.pt')
+            else:
+                save(model.state_dict(), f'{results_folder_path}{args.task}.pt')
 
         log.info(('Epoch %d/%d:' % (epoch, args.epochs)).ljust(20) +
               '%.2f' % (err_cls * 100))
