@@ -73,6 +73,44 @@ class ResultsManager():
             print(scenario.upper(), ':')
             print(scenario_summary, '\n')
 
+    def print_summary_latex(self, max_cols=8):
+        from math import ceil
+        import warnings
+        warnings.simplefilter(action='ignore', category=FutureWarning)
+
+        if not hasattr(self, 'summary'):
+            self.generate_summary()
+
+        res = ('-' * 30) + 'START LATEX' +  ('-' * 30)
+        for scenario in self.summary.keys():
+            hdrs = self.summary[scenario].columns.values
+            short_hdrs = [x.split('_')[0] for x in hdrs]
+            length = len(hdrs)
+            if max_cols == 0 or max_cols > length:
+                max_cols = length
+            start = 0
+            end = min(max_cols, length)
+            num_splits = ceil(length / max_cols)
+            res += "\n\\begin{table}\n\\centering\n\\caption{" + scenario.capitalize() + "}\n"
+            for x in range(num_splits):
+                res += self.summary[scenario].to_latex(float_format="%.1f",
+                                                       columns=hdrs[start:end],
+                                                       header=short_hdrs[start:end])
+                if x < num_splits - 1:
+                    res += "\\vspace{-.6mm}\\\\\n"
+
+                start += max_cols
+                if x == num_splits-2:
+                    end = length
+                else:
+                    end += max_cols
+
+            res += "\\end{table}\n"
+
+        res += ('-' * 30) + 'END LATEX' +  ('-' * 30)
+        print(res)
+
+
 
     def plot_summary(self):
         import matplotlib.pyplot as plt
