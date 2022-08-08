@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from itertools import chain
-from utils.data_loader import prepare_train_valid_data, prepare_joint_loader
+from utils.data_loader import get_train_valid_loaders, get_joint_loader
 from utils.testing import test
 from utils.utils import make_dirs
 
@@ -92,7 +92,7 @@ def train(model, args, results_folder_path='checkpoints/', lr=None,
                                            patience=args.patience,
                                            verbose=args.verbose,
                                            max_unsuccessful_reductions = n)
-    _, train_loader, _, valid_loader = prepare_train_valid_data(args)
+    train_loader, valid_loader = get_train_valid_loaders(args)
 
     all_err_cls = []
     for epoch in range(1, args.epochs + 1):
@@ -134,7 +134,7 @@ def train_one_epoch(model, epoch, optimizer, train_loader, criterion):
     log.info(f'Epoch {epoch} avg loss per batch: {total_loss / (batch_idx + 1):.4f}')
 
 
-def train_joint(model, args, results_folder_path='checkpoints/'):
+def train_joint(model, args, results_folder_path='checkpoints/', tasks=[]):
     make_dirs(results_folder_path)
     if results_folder_path[-1] != '/':
         results_folder_path += '/'
@@ -147,7 +147,7 @@ def train_joint(model, args, results_folder_path='checkpoints/'):
                                            patience=args.patience,
                                            verbose=args.verbose,
                                            max_unsuccessful_reductions = n)
-    joint_loader = prepare_joint_loader(args)
+    joint_loader = get_joint_loader(args, tasks)
 
     all_loss_per_batch = []
     for epoch in range(1, args.epochs + 1):

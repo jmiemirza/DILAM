@@ -2,7 +2,7 @@ from statistics import mean
 import logging
 from os.path import exists
 from torch import load
-from utils.data_loader import prepare_test_data
+from utils.data_loader import get_test_loader
 from utils.testing import test
 from dua import dua
 from utils.results_manager import ResultsManager
@@ -40,7 +40,7 @@ def disc_plug_and_play(args, net, bn_file_name=None):
             for i in range(0, idx + 1):
                 args.task = tasks[i]
                 load_bn_stats(net, args.task, ckpt)
-                test_loader = prepare_test_data(args)[1]
+                test_loader = get_test_loader(args)
                 err_cls = test(test_loader, net)[0] * 100
                 current_errors.append(err_cls)
                 log.info(f'\tError on Task-{i} ({tasks[i]}): {err_cls:.2f}')

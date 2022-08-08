@@ -1,5 +1,5 @@
 
-VALID_DATASETS = ['cifar10']
+VALID_DATASETS = ['cifar10', 'tiny-imagenet', 'imagenet']
 
 SEVERTITIES = [5]
 
@@ -10,7 +10,7 @@ TASKS = [
     'jpeg_compression'
 ]
 
-# TASKS = TASKS[:2]
+# TASKS = TASKS[:4]
 
 LOGGER_CFG = {
     'version': 1,

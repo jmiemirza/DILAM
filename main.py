@@ -7,14 +7,15 @@ import logging.config
 from os.path import exists
 from torch import nn
 import torch.backends.cudnn as cudnn
+import torchvision.models as models
 from disc import disc_plug_and_play, disc_adaption
 from models.wide_resnet import WideResNet
 from models.resnet_26 import ResNetCifar
-from utils.data_loader import dataset_checks
+from utils.data_loader import dataset_checks, get_test_loader, get_train_loader
 from utils.training import train
 import baselines
 from utils.results_manager import ResultsManager
-from globals import LOGGER_CFG
+from globals import LOGGER_CFG, TASKS
 
 
 logging.config.dictConfig(LOGGER_CFG)
@@ -38,7 +39,8 @@ def main():
     # args.batch_size = 16
     # args.initial_task_lr = 0.001
 
-    # disc_adaption(args, net)
+    # disc_adaption(args, net, save_bn_stats=True, use_training_data=False)
+    # disc_adaption(args, net, save_bn_stats=False, use_training_data=True)
     # disc_plug_and_play(args, net)
 
     # results.save_to_file(file_name='disc_results.pkl')
@@ -68,10 +70,10 @@ def main():
     # baselines.joint_training(net, args, scenario='offline')
 
 
-    # print(results.results)
-    results.print_summary()
     # results.plot_summary()
-    results.plot_scenario_summary('online')
+    # results.print_summary()
+    # results.print_summary_latex()
+    # results.plot_scenario_summary('online')
     # results.save_to_file(file_name='123456_res.pkl')
 
 
@@ -98,10 +100,18 @@ def init_net(args):
     if args.model == 'wrn':
         net = WideResNet(widen_factor=2, depth=40, num_classes=10)
         WideResNet.get_heads = get_heads_classification
+
     elif args.model == 'res':
         net = ResNetCifar(args.depth, args.width, channels=3, classes=10,
                           norm_layer=norm_layer)
         ResNetCifar.get_heads = get_heads_classification
+
+    elif args.model == 'res18':
+        num_classes = 200 if args.dataset == 'tiny-imagenet' else 1000
+        # net = models.resnet18(weights='DEFAULT', norm_layer=norm_layer, num_classes=num_classes)
+        net = models.resnet18(norm_layer=norm_layer, num_classes=num_classes)
+        models.resnet18.get_heads = get_heads_classification
+
     else:
         raise Exception(f'Invalid model argument: {args.model}')
 

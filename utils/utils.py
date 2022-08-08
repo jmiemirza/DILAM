@@ -17,13 +17,6 @@ def write_to_txt(name, content):
         text_file.write(content)
 
 
-def my_makedir(name):
-    try:
-        os.makedirs(name)
-    except OSError:
-        pass
-
-
 def make_dirs(path):
     os.makedirs(path, exist_ok=True)
 
@@ -65,3 +58,36 @@ def plot_adaptation_err(all_err_cls, corr, args):
     plt.legend()
     plt.savefig(os.path.join(args.outf, corr), format="png")
     plt.close(fig)
+
+
+def setup_tiny_imagenet_val_dir(val_dir_path, val_num_imgs=10000, rm_initial=False):
+    """
+        Tiny ImageNet validation set comes with 10k images from all 200 classes
+        placed in the same folder (images) and a val_annotations.txt pointing
+        out which image belongs to which class.
+        This method moves all of the images into an image folder inside a folder
+        named after the class they belong to.
+    """
+    import glob
+    from shutil import move, copy
+    from os.path import join, split, exists
+    from tqdm import tqdm
+
+    val_dict = {}
+    with open(f'{val_dir_path}/val_annotations.txt', 'r') as f:
+        for line in f.readlines():
+            split_line = line.split('\t')
+            val_dict[split_line[0]] = split_line[1]
+
+    paths = glob.iglob(join(val_dir_path, 'images', '*'))
+    for path in tqdm(paths, total=val_num_imgs):
+        file = split(path)[1]
+        folder = val_dict[file]
+        if not exists(val_dir_path + str(folder)):
+            make_dirs(join(val_dir_path, str(folder), 'images'))
+        # copy(path, join(val_dir_path, str(folder), 'images', str(file)))
+        move(path, join(val_dir_path, str(folder), 'images', str(file)))
+
+    if rm_initial:
+        os.rmdir(join(val_dir_path, 'images'))
+        os.remove(join(val_dir_path, 'val_annotations.txt'))

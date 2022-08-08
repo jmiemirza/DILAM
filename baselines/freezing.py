@@ -3,7 +3,7 @@ from os.path import exists
 import logging
 from torch import load, save
 from utils.training import train
-from utils.data_loader import prepare_test_data
+from utils.data_loader import get_test_loader
 from utils.testing import test
 from utils.results_manager import ResultsManager
 from globals import TASKS, SEVERTITIES
@@ -37,7 +37,7 @@ def freezing(net, args, scenario='online'):
             for i in range(0, idx +1):
                 args.task = tasks[i]
                 setup_net(net, args, ckpt_folder, idx)
-                test_loader = prepare_test_data(args)[1]
+                test_loader = get_test_loader(args)
                 err_cls = test(test_loader, net)[0] * 100
                 current_errors.append(err_cls)
                 log.info(f'\tError on Task-{i} ({tasks[i]}): {err_cls:.2f}')

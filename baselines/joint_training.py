@@ -3,7 +3,7 @@ from os.path import exists
 import logging
 from torch import load
 from utils.training import train_joint
-from utils.data_loader import prepare_test_data
+from utils.data_loader import get_test_loader
 from utils.testing import test
 from utils.results_manager import ResultsManager
 from globals import TASKS, SEVERTITIES
@@ -35,7 +35,7 @@ def joint_training(net, args, scenario='online'):
 
             for i in range(0, idx + 1):
                 args.task = tasks[i]
-                test_loader = prepare_test_data(args)[1]
+                test_loader = get_test_loader(args)
                 err_cls = test(test_loader, net)[0] * 100
                 current_errors.append(err_cls)
                 log.info(f'\tError on Task-{i} ({tasks[i]}): {err_cls:.2f}')
@@ -54,7 +54,9 @@ def setup_net(net, args, ckpt_folder, idx):
         if not exists(ckpt_path):
             log.info(f'No checkpoint for Joint-Training Task-{idx + 1} '
                      f'({args.task}) - Starting training.')
-            train_joint(net, args, results_folder_path=ckpt_folder)
+            tasks = ['initial'] + TASKS[:idx]
+            log.debug(f'Training model on: {tasks}')
+            train_joint(net, args, results_folder_path=ckpt_folder, tasks=tasks)
         else:
             net.load_state_dict(load(ckpt_path))
     net.eval()

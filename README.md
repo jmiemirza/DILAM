@@ -2,16 +2,6 @@ Datasets Directory structures
 =
 CIFAR-10-C
 -
-Excpected directory structure for CIFAR-10-C
-
-If the `cifar-10-batches-py` directory and its contents are not present, they will be downloaded.
-
-The files in the `train` directory are expected to be the **corrupted** version of the original training set.
-
-**Currently**, the files in `train` are also expected to only contain their level 5 corruption.
-For files containing all levels, the necessary code additions have been added as comments
-in `data_loader.py`. This will be changed to only use files with all 5 severity levels in the near future.
-
 ```
 args.dataroot
 ├── cifar-10-batches-py
@@ -29,5 +19,99 @@ args.dataroot
         ├── brightness.npy
         ├── contrast.npy
         ├── ...
+
+```
+
+
+Tiny-Imagenet-200-C
+-
+```
+args.dataroot
+├── tiny-imagenet-200
+|   ├── train
+|   |   ├── n01443537
+|   |   |   └──images
+|   |   |       ├── *.JPEG
+|   |   |       ├── ...
+|   |   |
+|   |   ├── n01629819
+|   |   ├── ...
+|   |
+|   └── val
+|       ├── n01443537
+|       |   └── images
+|       |       ├── *.JPEG
+|       |       ├── ...
+|       |
+|       ├── n01629819
+|       ├── ...
+|
+└── tiny-imagenet-200-c
+    ├── val
+    |   ├── brightness
+    |   |   ├── 1
+    |   |   |   ├── n01443537
+    |   |   |   |   ├── *.JPEG
+    |   |   |   |   ├── ...
+    |   |   |   |
+    |   |   |   ├── n01629819
+    |   |   |   ├── ...
+    |   |   |
+    |   |   ├── 2
+    |   |   ├── 3
+    |   |   ├── 4
+    |   |   └── 5
+    |   |
+    |   ├── contrast
+    |   ├── ...
+    |
+    └── train
+        ├── ... same as tiny-imagenet-200-c/val
+
+```
+
+
+Imagenet
+-
+```
+args.dataroot
+├── imagenet
+|   ├── train
+|   |   ├── n01443537
+|   |   |   ├── *.JPEG
+|   |   |   ├── ...
+|   |   |
+|   |   ├── n01629819
+|   |   ├── ...
+|   |
+|   └── val
+|       ├── n01443537
+|       |   ├── *.JPEG
+|       |   ├── ...
+|       |
+|       ├── n01629819
+|       ├── ...
+|
+└── imagenet-c
+    ├── val
+    |   ├── brightness
+    |   |   ├── 1
+    |   |   |   ├── n01443537
+    |   |   |   |   ├── *.JPEG
+    |   |   |   |   ├── ...
+    |   |   |   |
+    |   |   |   ├── n01629819
+    |   |   |   ├── ...
+    |   |   |
+    |   |   ├── 2
+    |   |   ├── 3
+    |   |   ├── 4
+    |   |   └── 5
+    |   |
+    |   ├── contrast
+    |   ├── ...
+    |
+    └── train
+        ├── ... same as imagenet-c/val
 
 ```

@@ -3,6 +3,7 @@ from utils.data_loader import *
 from tqdm import tqdm
 from PIL import Image
 import torchvision.transforms as transforms
+from utils.utils import make_dirs
 from utils.testing import test
 from utils.rotation import *
 from globals import TASKS, SEVERTITIES
@@ -33,18 +34,16 @@ def dua(args, net, save_bn_stats=False, use_training_data=False):
             net.load_state_dict(ckpt)
 
             if use_training_data:
-                train_set, _, _, valid_loader = prepare_train_valid_data(args)
-                dataset = train_set
-                loader = valid_loader
+                train_loader, valid_loader = get_train_valid_loaders(args)
             else:
-                dataset, loader = prepare_test_data(args)
+                train_loader = valid_loader = get_test_loader(args)
 
-            err_cls = test(loader, net)[0] * 100
+            err_cls = test(valid_loader, net)[0] * 100
             log.info(f'Error Before Adaptation: {err_cls:.1f}')
 
             for i in tqdm(range(1, args.num_samples + 1)):
                 net.eval()
-                image = Image.fromarray(dataset.data[i - 1])
+                image = train_loader.dataset.get_pil_image_from_idx(i - 1)
                 mom_new = (mom_pre * decay_factor)
                 for m in net.modules():
                     if isinstance(m, torch.nn.modules.batchnorm._BatchNorm):
@@ -57,7 +56,7 @@ def dua(args, net, save_bn_stats=False, use_training_data=False):
                 inputs_ssh, _ = rotate_batch(inputs, 'rand')
                 inputs_ssh = inputs_ssh.cuda()
                 _ = net(inputs_ssh)
-                err_cls = test(loader, net)[0] * 100
+                err_cls = test(valid_loader, net)[0] * 100
                 err.append(err_cls)
                 if err_cls <= min(err):
                     save_bn_stats_in_model(net, args.task)
@@ -90,6 +89,7 @@ def save_bn_stats_to_file(net, dataset_str=None, file_name=None):
         Saves net.bn_stats content to a file.
     """
     ckpt_folder = 'checkpoints/' + dataset_str + '/' + net.__class__.__name__ + '/'
+    make_dirs(ckpt_folder)
     if not file_name:
         file_name = 'BN_stats.pt'
     torch.save(net.bn_stats, ckpt_folder + file_name)

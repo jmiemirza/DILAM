@@ -1,11 +1,12 @@
 import copy
 import logging
+import numpy as np
 from os.path import exists
 from torch import manual_seed, randperm
 from torch.utils.data import DataLoader, Subset, ConcatDataset
-from torchvision import datasets
+from torchvision.datasets import CIFAR10, ImageFolder, vision
 import torchvision.transforms as transforms
-import numpy as np
+from utils.dataset_wrappers import ImageFolderWrap, CIFAR10C
 from globals import *
 
 log = logging.getLogger('MAIN.DATA')
@@ -22,54 +23,101 @@ tr_transforms = transforms.Compose([transforms.RandomCrop(32, padding=4),
                                     transforms.Normalize(*NORM)
                                     ])
 
+tr_transforms_tiny = transforms.Compose([transforms.RandomCrop(64, padding=4),
+                                         transforms.RandomHorizontalFlip(),
+                                         transforms.ToTensor(),
+                                         transforms.Normalize(*NORM)
+                                         ])
 
-def prepare_test_data(args):
-    if args.dataset == 'cifar10':
-        tesize = 10000
-        if not hasattr(args, 'task') or args.task == 'initial':
-            # log.debug('Test on the original test set')
-            teset = datasets.CIFAR10(root=args.dataroot, train=False,
-                                     transform=te_transforms)
-        elif args.task in TASKS:
-            # log.debug('Test on %s level %d' % (args.task, args.level))
-            teset_raw = np.load(args.dataroot + f'/CIFAR-10-C/test/{args.task}.npy')
-            teset_raw = teset_raw[(args.level - 1) * tesize: args.level * tesize]
-            teset = datasets.CIFAR10(root=args.dataroot, train=False,
-                                     transform=te_transforms)
-            teset.data = teset_raw
-        else:
-            raise Exception('Task not found!')
+NORM_IMGNET = ((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+
+tr_transforms_imgnet = transforms.Compose([transforms.RandomResizedCrop(224),
+                                           transforms.RandomHorizontalFlip(),
+                                           transforms.ToTensor(),
+                                           transforms.Normalize(*NORM_IMGNET)
+                                           ])
+
+te_transforms_imgnet = transforms.Compose([transforms.Resize(256),
+                                           transforms.CenterCrop(224),
+                                           transforms.ToTensor(),
+                                           transforms.Normalize(*NORM_IMGNET)
+                                           ])
+
+
+def get_test_loader(args):
+    teset = fetch_dataset(args, train=False)
 
     if not hasattr(args, 'workers'):
         args.workers = 1
     teloader = DataLoader(teset, batch_size=args.batch_size, shuffle=True,
                           num_workers=args.workers)
-    return teset, teloader
+    return teloader
 
 
-def prepare_train_data(args):
-    log.debug('Preparing original training data...')
-    if args.dataset == 'cifar10':
-        trset = datasets.CIFAR10(root=args.dataroot, transform=tr_transforms,
-                                 train=True)
+def get_train_loader(args):
+    trset = fetch_dataset(args, train=True)
 
     if not hasattr(args, 'workers'):
         args.workers = 1
     trloader = DataLoader(trset, batch_size=args.batch_size, shuffle=True,
                           num_workers=args.workers)
-    return trset, trloader
+    return trloader
 
 
-def prepare_train_valid_data(args):
+def fetch_dataset(args, train=True):
+    if hasattr(args, 'task') and args.task not in ['initial'] + TASKS:
+        raise Exception(f'Invalid task: {args.task}')
+    split = 'train' if train else 'val'
+
+    if args.dataset == 'cifar10':
+        trfs = tr_transforms if train else te_transforms
+        if not hasattr(args, 'task') or args.task == 'initial':
+            ds = CIFAR10(root=args.dataroot, transform=trfs, train=train)
+        elif args.task in TASKS:
+            # TODO use args.level only, with files containing all corruption levels
+            level = 1 if train else args.level
+            ds = CIFAR10C(args.dataroot + '/CIFAR-10-C', args.task, train=train,
+                          transform=trfs, severity=level)
+
+    elif args.dataset == 'tiny-imagenet':
+        trfs = tr_transforms_tiny if train else te_transforms
+        if not hasattr(args, 'task') or args.task == 'initial':
+            ds = ImageFolderWrap(f'{args.dataroot}/tiny-imagenet-200/{split}', trfs)
+        elif args.task in TASKS:
+            path = f'{args.dataroot}/tiny-imagenet-200-c/{split}/{args.task}/{args.level}'
+            ds = ImageFolderWrap(path, trfs)
+
+    elif args.dataset == 'imagenet':
+        trfs = tr_transforms_imgnet if train else te_transforms_imgnet
+        if not hasattr(args, 'task') or args.task == 'initial':
+            ds = ImageFolderWrap(f'{args.dataroot}/imagenet/{split}', trfs)
+        elif args.task in TASKS:
+            path = f'{args.dataroot}/imagenet-c/{split}/{args.task}/{args.level}'
+            ds = ImageFolderWrap(path, trfs)
+
+    return ds
+
+
+def get_train_valid_loaders(args):
+    if args.dataset == 'cifar10':
+        return get_cifar10_train_valid_loaders(args)
+    return get_train_loader(args), get_test_loader(args)
+
+
+# TODO just split the cifar dataset...
+from PIL import Image
+def get_pil_image_from_idx(self, idx: int = 0):
+        return Image.fromarray(self.dataset.data[idx])
+Subset.get_pil_image_from_idx = get_pil_image_from_idx
+
+def get_cifar10_train_valid_loaders(args):
     log.debug(f'Preparing training and validation data for task {args.task}')
     if not hasattr(args, 'workers'):
         args.workers = 1
     assert args.train_val_split > 0 and args.train_val_split < 1
 
-    train_set = datasets.CIFAR10(root=args.dataroot, transform=tr_transforms,
-                                 train=True)
-    valid_set = datasets.CIFAR10(root=args.dataroot, transform=te_transforms,
-                                 train=True)
+    train_set = CIFAR10(root=args.dataroot, transform=tr_transforms, train=True)
+    valid_set = CIFAR10(root=args.dataroot, transform=te_transforms, train=True)
     if args.task != 'initial':
         train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.task}.npy')
         # This currently asumes files generated for level 5 only.
@@ -85,39 +133,38 @@ def prepare_train_valid_data(args):
     valid_size = round(len(train_set) * args.train_val_split)
     train_set = Subset(train_set, indices[:-valid_size])
     valid_set = Subset(valid_set, indices[-valid_size:])
+    # train_set
     train_loader = DataLoader(train_set, batch_size=args.batch_size,
                               shuffle=False, num_workers=args.workers)
     valid_loader = DataLoader(valid_set, batch_size=args.batch_size,
                               shuffle=False, num_workers=args.workers)
-    return train_set.dataset, train_loader, valid_set.dataset, valid_loader
+    return train_loader, valid_loader
 
-# TODO
-def prepare_joint_loader(args):
-    log.debug(f'Preparing joint (training + test) data for task {args.task}')
-    train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.task}.npy')
-    # This currently asumes files generated for level 5 only.
-    # Uncomment the following 2 lines for files containing all levels.
-    # tesize = 50000
-    # train_set_raw = train_set_raw[(args.level - 1) * tesize: args.level * tesize]
-    train_set = datasets.CIFAR10(root=args.dataroot, transform=tr_transforms,
-                                 train=True)
-    train_set.data = train_set_raw
 
-    test_size = 10000
-    test_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/test/{args.task}.npy')
-    test_set_raw = test_set_raw[(args.level - 1) * test_size: args.level * test_size]
-    test_set = datasets.CIFAR10(root=args.dataroot, train=False,
-                                transform=te_transforms)
-    test_set.data = test_set_raw
-
-    joint_set = ConcatDataset([train_set, test_set])
+def get_joint_loader(args, tasks):
+    datasets = []
+    if args.dataset == 'cifar10':
+        if 'initial' in tasks:
+            tasks.remove('initial')
+        datasets.append(CIFAR10(root=args.dataroot, transform=tr_transforms, train=True))
+        datasets.append(CIFAR10(root=args.dataroot, transform=te_transforms, train=False))
+        datasets.append(CIFAR10C(args.dataroot + '/CIFAR-10-C', *tasks, train=True,
+                                 transform=tr_transforms, severity=1))
+        datasets.append(CIFAR10C(args.dataroot + '/CIFAR-10-C', *tasks, train=False,
+                                 transform=te_transforms, severity=1))
+    else:
+        tmp = args.task
+        for args.task in tasks:
+            datasets.append(fetch_dataset(args, train=True))
+            datasets.append(fetch_dataset(args, train=False))
+        args.task = tmp
 
     if not hasattr(args, 'workers'):
         args.workers = 1
-
-    joint_loader = DataLoader(joint_set, batch_size=args.batch_size, shuffle=True,
+    joint_loader = DataLoader(ConcatDataset(datasets),
+                              batch_size=args.batch_size,
+                              shuffle=True,
                               num_workers=args.workers)
-
     return joint_loader
 
 
@@ -127,7 +174,7 @@ def dataset_checks(args):
 
     error = False
     if args.dataset == 'cifar10':
-        error = check_cifar_ten_c(args)
+        error = check_cifar10_c(args)
 
     if error:
         log.critical('Dataset checks unsuccessful!')
@@ -136,8 +183,8 @@ def dataset_checks(args):
         log.info('Dataset checks successful!')
 
 
-def check_cifar_ten_c(args):
-    datasets.CIFAR10(root=args.dataroot, download=True)
+def check_cifar10_c(args):
+    CIFAR10(root=args.dataroot, download=True)
     error = False
     test_set_path = args.dataroot + '/CIFAR-10-C/test/'
     train_set_path = args.dataroot + '/CIFAR-10-C/train/'
@@ -163,7 +210,7 @@ def check_cifar_ten_c(args):
     return error
 
 
-def check_kitti(args):
-    datasets.Kitti(root=args.dataroot, download=True)
-    ...
+# def check_kitti(args):
+#     datasets.Kitti(root=args.dataroot, download=True)
+#     ...
 

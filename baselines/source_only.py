@@ -1,7 +1,7 @@
 from statistics import mean
 import logging
 from torch import load
-from utils.data_loader import prepare_test_data
+from utils.data_loader import get_test_loader
 from utils.testing import test
 from utils.results_manager import ResultsManager
 from globals import TASKS, SEVERTITIES
@@ -25,7 +25,7 @@ def source_only(net, args):
         log.info(f'Corruption level of severity: {args.level}')
         all_errors = []
         for idx, args.task in enumerate(tasks):
-            test_loader = prepare_test_data(args)[1]
+            test_loader = get_test_loader(args)
             err_cls = test(test_loader, net)[0] * 100
             all_errors.append(err_cls)
             log.info(f'Error on Task-{idx} ({args.task}): {err_cls:.1f}')
