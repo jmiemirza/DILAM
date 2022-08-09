@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from PIL import Image
+import csv
 from torchvision.datasets import ImageFolder, vision
 
 
@@ -11,6 +12,63 @@ class ImageFolderWrap(ImageFolder):
 
     def get_pil_image_from_idx(self, idx: int = 0):
         return Image.open(self.imgs[idx][0])
+
+
+
+class KITTI(vision.VisionDataset):
+    image_dir_name = "image_2"
+    labels_dir_name = "label_2"
+    def __init__(self, root, split: str, task, severity, transform=None,
+                 target_transform=None, transforms=None):
+        super().__init__(root, transform=transform, transforms=transforms,
+                         target_transform=target_transform)
+        self.images = []
+        self.targets = []
+        self.root = root
+        self.split = split
+        if task == 'initial':
+            raw_folder = os.path.join(self.root, 'Kitti' , "raw")
+        else:
+            raw_folder = os.path.join(self.root, 'Kitti-c', task, str(severity))
+
+        image_dir = os.path.join(raw_folder, self.split, self.image_dir_name)
+        labels_dir = os.path.join(raw_folder, self.split, self.labels_dir_name)
+        for img_file in os.listdir(image_dir):
+            self.images.append(os.path.join(image_dir, img_file))
+            self.targets.append(os.path.join(labels_dir, f"{img_file.split('.')[0]}.txt"))
+
+
+    def __getitem__(self, index: int):
+        image = Image.open(self.images[index])
+        target = self._parse_target(index)
+        if self.transforms:
+            image, target = self.transforms(image, target)
+        return image, target
+
+
+    def _parse_target(self, index: int):
+        target = []
+        with open(self.targets[index]) as inp:
+            content = csv.reader(inp, delimiter=" ")
+            for line in content:
+                target.append(
+                    {
+                        "type": line[0],
+                        "truncated": float(line[1]),
+                        "occluded": int(line[2]),
+                        "alpha": float(line[3]),
+                        "bbox": [float(x) for x in line[4:8]],
+                        "dimensions": [float(x) for x in line[8:11]],
+                        "location": [float(x) for x in line[11:14]],
+                        "rotation_y": float(line[14]),
+                    }
+                )
+        return target
+
+
+    def get_pil_image_from_idx(self, idx: int = 0):
+        return Image.open(self.images[idx])
+
 
 
 class CIFAR10C(vision.VisionDataset):

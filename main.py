@@ -15,10 +15,9 @@ from utils.data_loader import dataset_checks, get_test_loader, get_train_loader
 from utils.training import train
 import baselines
 from utils.results_manager import ResultsManager
-from globals import LOGGER_CFG, TASKS
+import globals
 
-
-logging.config.dictConfig(LOGGER_CFG)
+logging.config.dictConfig(globals.LOGGER_CFG)
 log = logging.getLogger('MAIN')
 
 
@@ -27,6 +26,9 @@ def main():
     cudnn.benchmark = True
 
     log.debug('-- hi --')
+
+    if args.dataset == 'kitti':
+        globals.TASKS = globals.KITTI_TASKS
 
     net = init_net(args)
     initial_checks(net, args)
@@ -93,8 +95,7 @@ def init_net(args):
         norm_layer = gn_helper
 
     def get_heads_classification(self):
-        for m in self.modules():
-            pass
+        for m in self.modules(): pass
         return m
 
     if args.model == 'wrn':

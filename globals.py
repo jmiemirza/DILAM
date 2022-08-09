@@ -1,7 +1,10 @@
 
-VALID_DATASETS = ['cifar10', 'tiny-imagenet', 'imagenet']
+VALID_DATASETS = ['cifar10', 'tiny-imagenet', 'imagenet', 'kitti']
 
 SEVERTITIES = [5]
+
+RAIN_SEVERITIES = ['1mm', '5mm', '17mm', '25mm', '50mm', '75mm', '100mm', '200mm']
+FOG_SEVERITIES = ['30m', '40m', '50m', '75m', '150m', '375m', '750m']
 
 TASKS = [
     'gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur',
@@ -9,6 +12,8 @@ TASKS = [
     'brightness', 'contrast', 'elastic_transform', 'pixelate',
     'jpeg_compression'
 ]
+
+KITTI_TASKS = ['fog', 'rain', 'snow']
 
 # TASKS = TASKS[:4]
 

@@ -4,9 +4,9 @@ import numpy as np
 from os.path import exists
 from torch import manual_seed, randperm
 from torch.utils.data import DataLoader, Subset, ConcatDataset
-from torchvision.datasets import CIFAR10, ImageFolder, vision
+from torchvision.datasets import CIFAR10
 import torchvision.transforms as transforms
-from utils.dataset_wrappers import ImageFolderWrap, CIFAR10C
+from utils.dataset_wrappers import ImageFolderWrap, CIFAR10C, KITTI
 from globals import *
 
 log = logging.getLogger('MAIN.DATA')
@@ -42,6 +42,10 @@ te_transforms_imgnet = transforms.Compose([transforms.Resize(256),
                                            transforms.ToTensor(),
                                            transforms.Normalize(*NORM_IMGNET)
                                            ])
+
+# TODO
+tr_transforms_kitti = tr_transforms_imgnet
+te_transforms_kitti = te_transforms_imgnet
 
 
 def get_test_loader(args):
@@ -94,6 +98,14 @@ def fetch_dataset(args, train=True):
         elif args.task in TASKS:
             path = f'{args.dataroot}/imagenet-c/{split}/{args.task}/{args.level}'
             ds = ImageFolderWrap(path, trfs)
+
+    # TODO
+    elif args.dataset == 'kitti':
+        trfs = tr_transforms_kitti if train else te_transforms_kitti
+        if not hasattr(args, 'task') or args.task == 'initial':
+            ds = KITTI(args.dataroot, split, 'initial', args.level, transforms=...)
+        elif args.task in TASKS:
+            ds = KITTI(args.dataroot, split, args.task, args.level, transforms=...)
 
     return ds
 
