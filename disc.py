@@ -18,14 +18,15 @@ def disc_adaption(args, net, save_bn_stats=False, use_training_data=True):
 def disc_plug_and_play(args, net, bn_file_name=None):
     ckpt = load(args.ckpt_path)
 
-    bn_file_path = 'checkpoints/' + args.dataset + '/' + net.__class__.__name__ + '/'
+    bn_file_path = 'checkpoints/' + args.dataset + '/' + args.model + '/'
     if not bn_file_name:
         bn_file_name = 'BN_stats.pt'
     bn_file_path += bn_file_name
     if exists(bn_file_path):
         load_bn_stats_file(net, bn_file_path)
-    elif not net.bn_stats.get(TASKS[0]):
-        raise Exception('Could not find BN stats')
+    if not all(task in net.bn_stats for task in TASKS):
+        raise Exception('BN Stats not containing all tasks')
+
 
     tasks = ['initial'] + TASKS
     results = ResultsManager()

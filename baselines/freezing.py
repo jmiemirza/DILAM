@@ -5,6 +5,7 @@ from torch import load, save
 from utils.training import train
 from utils.data_loader import get_test_loader
 from utils.testing import test
+from utils.utils import make_dirs
 from utils.results_manager import ResultsManager
 from globals import TASKS, SEVERTITIES
 
@@ -19,7 +20,7 @@ def freezing(net, args, scenario='online'):
         args.epochs = 1
     elif scenario == 'offline':
         args.epochs = 150
-    ckpt_folder = 'checkpoints/' + args.dataset + '/' + net.__class__.__name__
+    ckpt_folder = 'checkpoints/' + args.dataset + '/' + args.model
     ckpt_folder += '/freezing/' + scenario + '/'
     results = ResultsManager()
 
@@ -64,6 +65,7 @@ def setup_net(net, args, ckpt_folder, idx):
 
 
 def save_initial_task_head(net, ckpt_folder):
+    make_dirs(ckpt_folder)
     ckpt_path = ckpt_folder + 'initial.pt'
     save(net.get_heads().state_dict(), ckpt_path)
     net.eval()

@@ -20,7 +20,7 @@ def joint_training(net, args, scenario='online'):
         args.epochs = 1
     elif scenario == 'offline':
         args.epochs = 150
-    ckpt_folder = 'checkpoints/' + args.dataset + '/' + net.__class__.__name__
+    ckpt_folder = 'checkpoints/' + args.dataset + '/' + args.model
     ckpt_folder += '/joint_training/' + scenario + '/'
     results = ResultsManager()
 
@@ -52,7 +52,7 @@ def setup_net(net, args, ckpt_folder, idx):
     if args.task != 'initial':
         ckpt_path = ckpt_folder + args.task + '.pt'
         if not exists(ckpt_path):
-            log.info(f'No checkpoint for Joint-Training Task-{idx + 1} '
+            log.info(f'No checkpoint for Joint-Training Task-{idx} '
                      f'({args.task}) - Starting training.')
             tasks = ['initial'] + TASKS[:idx]
             log.debug(f'Training model on: {tasks}')

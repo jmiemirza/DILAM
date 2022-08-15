@@ -19,7 +19,7 @@ def disjoint(net, args, scenario='online'):
         args.epochs = 1
     elif scenario == 'offline':
         args.epochs = 150
-    ckpt_folder = 'checkpoints/' + args.dataset + '/' + net.__class__.__name__
+    ckpt_folder = 'checkpoints/' + args.dataset + '/' + args.model
     ckpt_folder += '/disjoint/' + scenario + '/'
     tasks = ['initial'] + TASKS
     results = ResultsManager()

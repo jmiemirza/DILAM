@@ -6,7 +6,7 @@ from torch import manual_seed, randperm
 from torch.utils.data import DataLoader, Subset, ConcatDataset
 from torchvision.datasets import CIFAR10
 import torchvision.transforms as transforms
-from utils.dataset_wrappers import ImageFolderWrap, CIFAR10C, KITTI
+from utils.dataset_wrappers import CIFAR, KITTI, ImgNet
 from globals import *
 
 log = logging.getLogger('MAIN.DATA')
@@ -49,130 +49,87 @@ te_transforms_kitti = te_transforms_imgnet
 
 
 def get_test_loader(args):
-    teset = fetch_dataset(args, train=False)
-
-    if not hasattr(args, 'workers'):
-        args.workers = 1
-    teloader = DataLoader(teset, batch_size=args.batch_size, shuffle=True,
-                          num_workers=args.workers)
-    return teloader
+    teset = fetch_dataset(args, split='test')
+    return DataLoader(teset, batch_size=args.batch_size, shuffle=True,
+                      num_workers=args.workers)
 
 
 def get_train_loader(args):
-    trset = fetch_dataset(args, train=True)
-
-    if not hasattr(args, 'workers'):
-        args.workers = 1
-    trloader = DataLoader(trset, batch_size=args.batch_size, shuffle=True,
-                          num_workers=args.workers)
-    return trloader
+    trset = fetch_dataset(args, split='train')
+    return DataLoader(trset, batch_size=args.batch_size, shuffle=True,
+                      num_workers=args.workers)
 
 
-def fetch_dataset(args, train=True):
-    if hasattr(args, 'task') and args.task not in ['initial'] + TASKS:
+def get_val_loader(args):
+    valset = fetch_dataset(args, split='val')
+    return DataLoader(valset, batch_size=args.batch_size, shuffle=True,
+                      num_workers=args.workers)
+
+
+def fetch_dataset(args, *, split: str = None):
+    if not hasattr(args, 'task'):
+        args.task = 'initial'
+    if args.task not in ['initial'] + TASKS:
         raise Exception(f'Invalid task: {args.task}')
-    split = 'train' if train else 'val'
 
     if args.dataset == 'cifar10':
-        trfs = tr_transforms if train else te_transforms
-        if not hasattr(args, 'task') or args.task == 'initial':
-            ds = CIFAR10(root=args.dataroot, transform=trfs, train=train)
-        elif args.task in TASKS:
-            # TODO use args.level only, with files containing all corruption levels
-            level = 1 if train else args.level
-            ds = CIFAR10C(args.dataroot + '/CIFAR-10-C', args.task, train=train,
-                          transform=trfs, severity=level)
+        transform = tr_transforms if split == 'train' else te_transforms
+        ds = CIFAR(args.dataroot, args.task, split=split, transform=transform,
+                   severity=args.level)
+        if split != 'test':
+            # train and val split are being created from the train set
+            ds = get_split_subset(args, ds, split)
 
-    elif args.dataset == 'tiny-imagenet':
-        trfs = tr_transforms_tiny if train else te_transforms
-        if not hasattr(args, 'task') or args.task == 'initial':
-            ds = ImageFolderWrap(f'{args.dataroot}/tiny-imagenet-200/{split}', trfs)
-        elif args.task in TASKS:
-            path = f'{args.dataroot}/tiny-imagenet-200-c/{split}/{args.task}/{args.level}'
-            ds = ImageFolderWrap(path, trfs)
-
-    elif args.dataset == 'imagenet':
-        trfs = tr_transforms_imgnet if train else te_transforms_imgnet
-        if not hasattr(args, 'task') or args.task == 'initial':
-            ds = ImageFolderWrap(f'{args.dataroot}/imagenet/{split}', trfs)
-        elif args.task in TASKS:
-            path = f'{args.dataroot}/imagenet-c/{split}/{args.task}/{args.level}'
-            ds = ImageFolderWrap(path, trfs)
+    elif args.dataset in ['imagenet', 'imagenet-mini']:
+        transform = tr_transforms_imgnet if split == 'train' else te_transforms_imgnet
+        ds = ImgNet(args.dataroot, split, args.task, args.level, transform)
+        if split != 'val':
+            # train and test split are being created from the train set
+            ds = get_split_subset(args, ds, split)
 
     # TODO
-    elif args.dataset == 'kitti':
-        trfs = tr_transforms_kitti if train else te_transforms_kitti
-        if not hasattr(args, 'task') or args.task == 'initial':
-            ds = KITTI(args.dataroot, split, 'initial', args.level, transforms=...)
-        elif args.task in TASKS:
-            ds = KITTI(args.dataroot, split, args.task, args.level, transforms=...)
+    # elif args.dataset == 'kitti':
+    #     trfs = tr_transforms_kitti if train else te_transforms_kitti
+    #     if not hasattr(args, 'task') or args.task == 'initial':
+    #         ds = KITTI(args.dataroot, split, 'initial', args.level, transforms=...)
+    #     elif args.task in TASKS:
+    #         ds = KITTI(args.dataroot, split, args.task, args.level, transforms=...)
 
     return ds
 
 
-def get_train_valid_loaders(args):
+def get_split_subset(args, ds, split):
+    manual_seed(args.split_seed)
+    indices = randperm(len(ds))
+    valid_size = round(len(ds) * args.split_ratio)
+
     if args.dataset == 'cifar10':
-        return get_cifar10_train_valid_loaders(args)
-    return get_train_loader(args), get_test_loader(args)
+        if split == 'train':
+            ds = Subset(ds, indices[:-valid_size])
+        elif split == 'val':
+            ds = Subset(ds, indices[-valid_size:])
+
+    elif args.dataset in ['imagenet', 'imagenet-mini']:
+        if split == 'train':
+            ds = Subset(ds, indices[:-valid_size])
+        elif split == 'test':
+            ds = Subset(ds, indices[-valid_size:])
+
+    return ds
 
 
-# TODO just split the cifar dataset...
-from PIL import Image
 def get_pil_image_from_idx(self, idx: int = 0):
-        return Image.fromarray(self.dataset.data[idx])
+    return self.dataset.get_pil_image_from_idx(idx)
 Subset.get_pil_image_from_idx = get_pil_image_from_idx
-
-def get_cifar10_train_valid_loaders(args):
-    log.debug(f'Preparing training and validation data for task {args.task}')
-    if not hasattr(args, 'workers'):
-        args.workers = 1
-    assert args.train_val_split > 0 and args.train_val_split < 1
-
-    train_set = CIFAR10(root=args.dataroot, transform=tr_transforms, train=True)
-    valid_set = CIFAR10(root=args.dataroot, transform=te_transforms, train=True)
-    if args.task != 'initial':
-        train_set_raw = np.load(args.dataroot + f'/CIFAR-10-C/train/{args.task}.npy')
-        # This currently asumes files generated for level 5 only.
-        # Uncomment the following 2 lines for files containing all levels.
-        # tesize = 50000
-        # train_set_raw = train_set_raw[(args.level - 1) * tesize: args.level * tesize]
-        train_set.data = train_set_raw
-        valid_set.data = copy.deepcopy(train_set_raw)
-
-    if args.train_val_split_seed != 0:
-        manual_seed(args.train_val_split_seed)
-    indices = randperm(len(train_set))
-    valid_size = round(len(train_set) * args.train_val_split)
-    train_set = Subset(train_set, indices[:-valid_size])
-    valid_set = Subset(valid_set, indices[-valid_size:])
-    # train_set
-    train_loader = DataLoader(train_set, batch_size=args.batch_size,
-                              shuffle=False, num_workers=args.workers)
-    valid_loader = DataLoader(valid_set, batch_size=args.batch_size,
-                              shuffle=False, num_workers=args.workers)
-    return train_loader, valid_loader
 
 
 def get_joint_loader(args, tasks):
     datasets = []
-    if args.dataset == 'cifar10':
-        if 'initial' in tasks:
-            tasks.remove('initial')
-        datasets.append(CIFAR10(root=args.dataroot, transform=tr_transforms, train=True))
-        datasets.append(CIFAR10(root=args.dataroot, transform=te_transforms, train=False))
-        datasets.append(CIFAR10C(args.dataroot + '/CIFAR-10-C', *tasks, train=True,
-                                 transform=tr_transforms, severity=1))
-        datasets.append(CIFAR10C(args.dataroot + '/CIFAR-10-C', *tasks, train=False,
-                                 transform=te_transforms, severity=1))
-    else:
-        tmp = args.task
-        for args.task in tasks:
-            datasets.append(fetch_dataset(args, train=True))
-            datasets.append(fetch_dataset(args, train=False))
-        args.task = tmp
+    for args.task in tasks:
+        datasets.append(fetch_dataset(args, split='train'))
+        datasets.append(fetch_dataset(args, split='test'))
+        datasets.append(fetch_dataset(args, split='val'))
 
-    if not hasattr(args, 'workers'):
-        args.workers = 1
     joint_loader = DataLoader(ConcatDataset(datasets),
                               batch_size=args.batch_size,
                               shuffle=True,
@@ -180,6 +137,7 @@ def get_joint_loader(args, tasks):
     return joint_loader
 
 
+from os.path import join, normpath
 def dataset_checks(args):
     if not args.dataset in VALID_DATASETS:
         raise Exception(f'Invalid dataset argument: {args.dataset}')
@@ -187,6 +145,8 @@ def dataset_checks(args):
     error = False
     if args.dataset == 'cifar10':
         error = check_cifar10_c(args)
+    elif args.dataset in ['imagenet', 'imagenet-mini']:
+        error = check_imgnet_c(args)
 
     if error:
         log.critical('Dataset checks unsuccessful!')
@@ -198,8 +158,8 @@ def dataset_checks(args):
 def check_cifar10_c(args):
     CIFAR10(root=args.dataroot, download=True)
     error = False
-    test_set_path = args.dataroot + '/CIFAR-10-C/test/'
-    train_set_path = args.dataroot + '/CIFAR-10-C/train/'
+    test_set_path = join(args.dataroot, 'CIFAR-10-C', 'test')
+    train_set_path = join(args.dataroot, 'CIFAR-10-C', 'train')
     if not exists(test_set_path):
         error = True
         log.error(f'CIFAR-10-C test set not found. Expected at {test_set_path}')
@@ -208,8 +168,8 @@ def check_cifar10_c(args):
         log.error(f'CIFAR-10-C training set not found. Expected at {train_set_path}')
     missing_files = []
     for task in TASKS:
-        test_samples = test_set_path + f'{task}.npy'
-        train_samples = train_set_path + f'{task}.npy'
+        test_samples = join(test_set_path, task + '.npy')
+        train_samples = join(train_set_path, task + '.npy')
         if not exists(test_samples):
             missing_files.append(test_samples)
         if not exists(train_samples):
@@ -218,8 +178,39 @@ def check_cifar10_c(args):
         error = True
         log.error('Missing the following CIFAR-10-C samples:')
         for f_path in missing_files:
-            log.error(f_path)
+            log.error(normpath(f_path))
     return error
+
+
+def check_imgnet_c(args):
+    error = False
+    val_set_path = join(args.dataroot, args.dataset + '-c', 'val')
+    train_set_path = join(args.dataroot, args.dataset + '-c', 'train')
+
+    if not exists(val_set_path):
+        error = True
+        log.error(f'{args.dataset.capitalize()} validation set not found. '
+                  f'Expected at {val_set_path}')
+    if not exists(train_set_path):
+        error = True
+        log.error(f'{args.dataset.capitalize()} training set not found. '
+                  f'Expected at {train_set_path}')
+    missing_dirs = []
+    for task in TASKS:
+        for severity in SEVERTITIES:
+            val_samples_dir = join(val_set_path, task, str(severity))
+            train_samples_dir = join(train_set_path, task, str(severity))
+            if not exists(val_samples_dir):
+                missing_dirs.append(val_samples_dir)
+            if not exists(train_samples_dir):
+                missing_dirs[:0] = [train_samples_dir]
+    if len(missing_dirs):
+        error = True
+        log.error(f'Missing the following {args.dataset.capitalize()} directories:')
+        for f_path in missing_dirs:
+            log.error(normpath(f_path))
+    return error
+
 
 
 # def check_kitti(args):

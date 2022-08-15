@@ -1,6 +1,6 @@
 *.pt
 **/__pycache__
-/yolov3
 /results
 /checkpoints
 *.txt
+*.bash

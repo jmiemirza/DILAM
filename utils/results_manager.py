@@ -1,11 +1,13 @@
 from os.path import exists
 import pandas as pd
+import logging
 
 class ResultsManager():
     """
         Singleton class to manage results.
     """
     _instance = None
+    log = logging.getLogger('MAIN.RESULTS')
 
     def __new__(cls):
         if cls._instance is None:
@@ -67,11 +69,11 @@ class ResultsManager():
     def print_summary(self):
         if not hasattr(self, 'summary'):
             self.generate_summary()
-        print('Results summary:')
+        self.log.info('Results summary:')
         pd.set_option('display.max_columns', None)
         for scenario, scenario_summary in self.summary.items():
-            print(scenario.upper(), ':')
-            print(scenario_summary, '\n')
+            self.log.info(scenario.upper(), ':')
+            self.log.info(scenario_summary, '\n')
 
     def print_summary_latex(self, max_cols=8):
         from math import ceil
@@ -108,7 +110,7 @@ class ResultsManager():
             res += "\\end{table}\n"
 
         res += ('-' * 30) + 'END LATEX' +  ('-' * 30)
-        print(res)
+        self.log.info(res)
 
 
 

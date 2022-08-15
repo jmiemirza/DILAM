@@ -24,6 +24,9 @@ def dua(args, net, save_bn_stats=False, use_training_data=False):
     decay_factor = args.decay_factor
     min_momentum_constant = args.min_mom
 
+    no_imp = 0
+    no_imp_cnt = 0
+
     for args.level in SEVERTITIES:
         log.info(f'Starting DUA for Level {args.level}')
         all_errors = []
@@ -34,7 +37,8 @@ def dua(args, net, save_bn_stats=False, use_training_data=False):
             net.load_state_dict(ckpt)
 
             if use_training_data:
-                train_loader, valid_loader = get_train_valid_loaders(args)
+                train_loader = get_train_loader(args)
+                valid_loader = get_val_loader(args)
             else:
                 train_loader = valid_loader = get_test_loader(args)
 
@@ -57,16 +61,27 @@ def dua(args, net, save_bn_stats=False, use_training_data=False):
                 inputs_ssh = inputs_ssh.cuda()
                 _ = net(inputs_ssh)
                 err_cls = test(valid_loader, net)[0] * 100
+
                 err.append(err_cls)
                 if err_cls <= min(err):
                     save_bn_stats_in_model(net, args.task)
+                    no_imp = 0
+                    no_imp_cnt = 0
+                else:
+                    no_imp += 1
+                    if no_imp >= 10:
+                        no_imp_cnt += no_imp
+                        no_imp = 0
+                        log.info(f'IT {i}/{args.num_samples}: NO Improvement '
+                                 f'for {no_imp_cnt} consecutive iterations')
+
             adaptation_error = min(err)
             log.info(f'Error After Adaptation: {adaptation_error:.1f}')
             all_errors.append(adaptation_error)
         log.info(f'Mean Error after Adaptation {(sum(all_errors) / len(all_errors)):.1f}')
 
     if save_bn_stats:
-        save_bn_stats_to_file(net, dataset_str=args.dataset)
+        save_bn_stats_to_file(net, args.dataset, args.model)
 
 
 def save_bn_stats_in_model(net, task):
@@ -84,11 +99,11 @@ def save_bn_stats_in_model(net, task):
             }
 
 
-def save_bn_stats_to_file(net, dataset_str=None, file_name=None):
+def save_bn_stats_to_file(net, dataset_str=None, model_str=None, file_name=None):
     """
         Saves net.bn_stats content to a file.
     """
-    ckpt_folder = 'checkpoints/' + dataset_str + '/' + net.__class__.__name__ + '/'
+    ckpt_folder = 'checkpoints/' + dataset_str + '/' + model_str + '/'
     make_dirs(ckpt_folder)
     if not file_name:
         file_name = 'BN_stats.pt'

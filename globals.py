@@ -1,5 +1,5 @@
 
-VALID_DATASETS = ['cifar10', 'tiny-imagenet', 'imagenet', 'kitti']
+VALID_DATASETS = ['cifar10', 'imagenet', 'kitti', 'imagenet-mini']
 
 SEVERTITIES = [5]
 
@@ -15,7 +15,44 @@ TASKS = [
 
 KITTI_TASKS = ['fog', 'rain', 'snow']
 
-# TASKS = TASKS[:4]
+# TASKS = TASKS[:3]
+
+
+PATHS = {
+    'sl': {
+        'Windows': {
+            'cifar10': {
+                'root': 'X:/thesis/CIFAR-10-C',
+                'ckpt': 'X:/thesis/framework/checkpoints/cifar10/wrn/Hendrycks2020AugMixWRN.pt',
+            },
+            'imagenet-mini': {
+                'root': 'X:/thesis/imagenet-mini',
+                # 'ckpt': 'X:/thesis/framework/checkpoints/imagenet-mini/res18/initialDefaultLearn.pt',
+                'ckpt': 'X:/thesis/res18_imgnet_default.pt',
+            },
+            'imagenet': {
+                'root': 'X:/thesis/imagenet',
+                'ckpt': 'X:/thesis/res18_imgnet_default.pt',
+            },
+        },
+        'Linux': {
+            'cifar10': {
+                'root': '/mnt/linux_data/datasets/cifar10',
+                'ckpt': '/home/sleitner/space/framework/checkpoints/cifar10/wrn/Hendrycks2020AugMixWRN.pt',
+            },
+            'imagenet-mini': {
+                'root': '/mnt/linux_data/datasets/imagenet-mini',
+                # 'ckpt': '/home/sleitner/space/framework/checkpoints/imagenet-mini/res18/initialDefaultLearn.pt',
+                'ckpt': '/home/sleitner/space/framework/res18_imgnet_default.pt',
+            },
+            'imagenet': {
+                'root': '/mnt/linux_data/datasets/imagenet',
+                'ckpt': '/home/sleitner/space/framework/res18_imgnet_default.pt',
+            },
+        },
+    },
+}
+
 
 LOGGER_CFG = {
     'version': 1,
@@ -67,6 +104,7 @@ LOGGER_CFG = {
         'MAIN.DISC': {},
         'MAIN.DUA': {},
         'MAIN.DATA': {},
+        'MAIN.RESULTS': {},
 
         'BASELINE': {
             'handlers': ['console_handler', 'file_handler'],

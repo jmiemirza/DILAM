@@ -4,7 +4,7 @@ import sys
 import time
 import logging
 import logging.config
-from os.path import exists
+from os.path import exists, join
 from torch import nn
 import torch.backends.cudnn as cudnn
 import torchvision.models as models
@@ -27,21 +27,45 @@ def main():
 
     log.debug('-- hi --')
 
-    if args.dataset == 'kitti':
-        globals.TASKS = globals.KITTI_TASKS
-
-    net = init_net(args)
-    initial_checks(net, args)
     results = ResultsManager()
 
+    # ------------------------------------------
+    args.usr = 'sl'
 
-    # disc adaption phase
-    # args.num_samples = 5
+    # args.num_samples = 10
+    args.num_samples = 20
     # args.num_samples = 320
-    # args.batch_size = 16
-    # args.initial_task_lr = 0.001
+
+    # args.batch_size = 64
+    # args.batch_size = 128
+
+    args.initial_task_lr = 0.001
+
+    # args.dataset = 'imagenet-mini'
+    # args.model = 'res18'
+
+    # args.dataset = 'imagenet'
+    # args.model = 'res18'
+    # ------------------------------------------
+
+    if args.dataset == 'kitti':
+        globals.TASKS = globals.KITTI_TASKS
+    elif args.dataset in ['imagenet', 'imagenet-mini']:
+        from utils.dataset_wrappers import ImgNet
+        ImgNet.initial_dir = args.dataset
+
+    if not hasattr(args, 'workers'):
+        args.workers = 1
+
+    if args.usr:
+        set_paths()
+    net = init_net(args)
+    initial_checks(net, args)
+
+
 
     # disc_adaption(args, net, save_bn_stats=True, use_training_data=False)
+    # disc_adaption(args, net, save_bn_stats=True, use_training_data=True)
     # disc_adaption(args, net, save_bn_stats=False, use_training_data=True)
     # disc_plug_and_play(args, net)
 
@@ -55,18 +79,11 @@ def main():
     # baselines.disjoint(net, args, 'online')
     # baselines.disjoint(net, args, 'offline')
 
-
-    # results.load_from_file(file_name='123_res.pkl')
-
     # baselines.freezing(net, args, 'online')
     # baselines.freezing(net, args, 'offline')
 
-    # results.load_from_file(file_name='1234_res.pkl')
-
     # baselines.fine_tuning(net, args, scenario='online')
     # baselines.fine_tuning(net, args, scenario='offline')
-
-    # results.load_from_file(file_name='12345_res.pkl')
 
     # baselines.joint_training(net, args, scenario='online')
     # baselines.joint_training(net, args, scenario='offline')
@@ -77,12 +94,18 @@ def main():
     # results.print_summary_latex()
     # results.plot_scenario_summary('online')
     # results.save_to_file(file_name='123456_res.pkl')
+    # results.save_to_file(file_name='CIFAR10_online_ALL.pkl')
 
 
     runtime = time.strftime('%H:%M:%S', time.gmtime(time.time() - start_time))
     log.info(f'Exection finished in {runtime}')
 
 
+
+def set_paths():
+    import platform
+    args.dataroot = globals.PATHS[args.usr][platform.system()][args.dataset]['root']
+    args.ckpt_path = globals.PATHS[args.usr][platform.system()][args.dataset]['ckpt']
 
 
 
@@ -111,7 +134,7 @@ def init_net(args):
         num_classes = 200 if args.dataset == 'tiny-imagenet' else 1000
         # net = models.resnet18(weights='DEFAULT', norm_layer=norm_layer, num_classes=num_classes)
         net = models.resnet18(norm_layer=norm_layer, num_classes=num_classes)
-        models.resnet18.get_heads = get_heads_classification
+        models.resnet.ResNet.get_heads = get_heads_classification
 
     else:
         raise Exception(f'Invalid model argument: {args.model}')
@@ -126,11 +149,13 @@ def initial_checks(net, args):
     dataset_checks(args)
 
     if not exists(args.ckpt_path):
+        args.epochs = 350
         log.info('Checkpoint trained on initial task not found - Starting training.')
         args.task = 'initial'
-        args.ckpt_path = 'checkpoints/' + args.dataset
+        args.ckpt_path = join('checkpoints', args.dataset, args.model)
         train(net, args, args.ckpt_path)
         log.info(f'Checkpoint trained on initial task saved at {args.ckpt_path}/initial.pt')
+        args.ckpt_path = join(args.ckpt_path, 'initial.pt')
 
 
 # Log uncaught exceptions, that aren't keyboard interrupts
@@ -165,9 +190,12 @@ if __name__ == '__main__':
     parser.add_argument('--patience', default=4, type=int)
     parser.add_argument('--lr_factor', default=1/3, type=float)
     parser.add_argument('--verbose', default=True, type=bool)
-    parser.add_argument('--train_val_split', default=0.2, type=float)
-    parser.add_argument('--train_val_split_seed', default=42, type=int)
     parser.add_argument('--max_unsuccessful_reductions', default=3, type=int)
+
+    parser.add_argument('--split_ratio', default=0.35, type=float)
+    parser.add_argument('--split_seed', default=42, type=int)
+
+    parser.add_argument('--usr', default=None, type=str)
 
     args: Namespace = parser.parse_args()
     main()
