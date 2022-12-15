@@ -1,6 +1,8 @@
-from os.path import exists
-import pandas as pd
 import logging
+from os.path import exists
+
+import pandas as pd
+
 
 class ResultsManager():
     """
@@ -9,17 +11,22 @@ class ResultsManager():
     _instance = None
     log = logging.getLogger('MAIN.RESULTS')
 
-    def __new__(cls):
+    def __new__(cls, _=None):
         if cls._instance is None:
             cls._instance = super(ResultsManager, cls).__new__(cls)
         return cls._instance
 
 
-    def __init__(self):
+    def __init__(self, metric='mAP@50'):
         if hasattr(self, 'results'):
             return
         columns = ['method', 'task', 'value', 'scenario']
         self.results = pd.DataFrame(columns=columns)
+        self.metric = metric
+
+
+    def has_results(self):
+        return not self.results.empty
 
 
     def save_to_file(self, file_name=None):
@@ -40,11 +47,11 @@ class ResultsManager():
         self.results = pd.read_pickle(path)
 
 
-    def add_result(self, method, task, error, scenario):
+    def add_result(self, method, task, value, scenario):
         entry = pd.DataFrame([{
             'method' : method,
             'task': task,
-            'value': error,
+            'value': value,
             'scenario': scenario
         }])
         self.results = pd.concat([self.results, entry], ignore_index=True)
@@ -76,8 +83,9 @@ class ResultsManager():
             self.log.info(scenario_summary, '\n')
 
     def print_summary_latex(self, max_cols=8):
-        from math import ceil
+        self.log.info(f'\n{self.results}')
         import warnings
+        from math import ceil
         warnings.simplefilter(action='ignore', category=FutureWarning)
 
         if not hasattr(self, 'summary'):
@@ -86,7 +94,8 @@ class ResultsManager():
         res = ('-' * 30) + 'START LATEX' +  ('-' * 30)
         for scenario in self.summary.keys():
             hdrs = self.summary[scenario].columns.values
-            short_hdrs = [x.split('_')[0] for x in hdrs]
+            # short_hdrs = [x.split('_')[0] for x in hdrs]
+            short_hdrs = [x for x in hdrs]
             length = len(hdrs)
             if max_cols == 0 or max_cols > length:
                 max_cols = length
@@ -113,14 +122,14 @@ class ResultsManager():
         self.log.info(res)
 
 
-
-    def plot_summary(self):
+    def plot_summary(self, file_name=None):
         import matplotlib.pyplot as plt
-        import seaborn as sns
         import matplotlib.ticker as mticker
+        import seaborn as sns
 
         sns.set_style("whitegrid")
-        g = sns.FacetGrid(data=self.results, col='scenario', hue='method', legend_out=True)
+        g = sns.FacetGrid(data=self.results, col='scenario', hue='method',
+                          legend_out=True, height=4, aspect= 1.33)
         g.map(sns.lineplot, 'task', 'value', marker='o')
         g.add_legend()
 
@@ -130,29 +139,16 @@ class ResultsManager():
             axes.set_xticklabels(axes.get_xticklabels(), rotation=90)
 
             # shorten x axis labels by cutting anything after an underscore
-            tasks_short = [x.get_text().split('_')[0] for x in axes.get_xticklabels()]
-            axes.set_xticklabels(tasks_short)
+            # tasks_short = [x.get_text().split('_')[0] for x in axes.get_xticklabels()]
+            # axes.set_xticklabels(tasks_short)
 
             axes.tick_params(labelleft=True)
             axes.set_xlabel('Task')
-            axes.set_ylabel('Error')
+            axes.set_ylabel(self.metric)
 
-        plt.show(block=True)
+        path = f'results/{file_name}' if file_name else 'results/plot_results.png'
+        g.tight_layout()
+        plt.savefig(path)
+        # plt.show(block=True)
 
-    def plot_scenario_summary(self, scenario='online'):
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-
-        sns.set_style("whitegrid")
-        df = self.results[self.results['scenario'] == scenario]
-        lp = sns.lineplot(x='task', y='value', hue='method', data=df, marker='o')
-
-        plt.legend(title='Method')
-        sns.move_legend(lp, "upper left", bbox_to_anchor=(1, 1))
-        plt.title(f'{scenario.capitalize()} scenario')
-        plt.ylabel('Mean Error over current and previous tasks')
-        plt.xlabel('Task')
-        plt.xticks(rotation=90)
-        plt.tight_layout()
-        plt.show(block=True)
 

@@ -1,12 +1,15 @@
+import logging
+from itertools import chain
+from os.path import join, dirname
 from typing import Iterable
 from warnings import warn
-import logging
-from torch import save
+
 import torch.nn as nn
 import torch.optim as optim
+from torch import save
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from itertools import chain
-from utils.data_loader import get_joint_loader, get_train_loader, get_val_loader
+
+from utils.data_loader import get_loader
 from utils.testing import test
 from utils.utils import make_dirs
 
@@ -72,11 +75,10 @@ def get_heads_params(model):
     return heads.parameters()
 
 
-def train(model, args, results_folder_path='checkpoints/', lr=None,
-          train_heads_only=False):
-    make_dirs(results_folder_path)
-    if results_folder_path[-1] != '/':
-        results_folder_path += '/'
+def train(model, args, result_path='checkpoints/ckpt.pt', lr=None,
+          train_heads_only=False, joint=False):
+    make_dirs(dirname(result_path))
+    device = next(model.parameters()).device
     if not lr:
         lr = args.lr
 
@@ -86,14 +88,15 @@ def train(model, args, results_folder_path='checkpoints/', lr=None,
     else:
         optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9,
                               weight_decay=5e-4)
-    criterion = nn.CrossEntropyLoss().cuda()
+    criterion = nn.CrossEntropyLoss().to(device)
     n = args.max_unsuccessful_reductions
     scheduler = ReduceLROnPlateauEarlyStop(optimizer, factor=args.lr_factor,
                                            patience=args.patience,
                                            verbose=args.verbose,
                                            max_unsuccessful_reductions = n)
-    train_loader = get_train_loader(args)
-    valid_loader = get_val_loader(args)
+
+    train_loader = get_loader(args, split='train', joint=joint)
+    valid_loader = get_loader(args, split='val', joint=joint)
 
     all_err_cls = []
     for epoch in range(1, args.epochs + 1):
@@ -104,74 +107,32 @@ def train(model, args, results_folder_path='checkpoints/', lr=None,
                 if isinstance(m, nn.modules.batchnorm._BatchNorm):
                     m.eval()
 
-        train_one_epoch(model, epoch, optimizer, train_loader, criterion)
+        train_one_epoch(model, epoch, optimizer, train_loader, criterion, device)
         err_cls = test(valid_loader, model)[0]
         all_err_cls.append(err_cls)
         if err_cls <= min(all_err_cls):
             if train_heads_only:
-                # TODO multi layer heads
-                save(model.get_heads().state_dict(), f'{results_folder_path}{args.task}.pt')
+                save(model.get_heads().state_dict(), result_path)
             else:
-                save(model.state_dict(), f'{results_folder_path}{args.task}.pt')
+                save(model.state_dict(), result_path)
 
         log.info(('Epoch %d/%d:' % (epoch, args.epochs)).ljust(20) +
-              '%.2f' % (err_cls * 100))
+              '%.1f' % (err_cls * 100))
 
         if not scheduler.step(err_cls):
             log.info("Finished training")
             return
 
 
-def train_one_epoch(model, epoch, optimizer, train_loader, criterion):
+def train_one_epoch(model, epoch, optimizer, train_loader, criterion, device):
     total_loss = 0
     for batch_idx, (images, labels) in enumerate(train_loader):
         optimizer.zero_grad()
-        images, labels = images.cuda(), labels.cuda()
+        images, labels = images.to(device), labels.to(device)
         outputs = model(images)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
     log.info(f'Epoch {epoch} avg loss per batch: {total_loss / (batch_idx + 1):.4f}')
-
-
-def train_joint(model, args, results_folder_path='checkpoints/', tasks=[]):
-    make_dirs(results_folder_path)
-    if results_folder_path[-1] != '/':
-        results_folder_path += '/'
-
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9,
-                          weight_decay=5e-4)
-    criterion = nn.CrossEntropyLoss().cuda()
-    n = args.max_unsuccessful_reductions
-    scheduler = ReduceLROnPlateauEarlyStop(optimizer, factor=args.lr_factor,
-                                           patience=args.patience,
-                                           verbose=args.verbose,
-                                           max_unsuccessful_reductions = n)
-    joint_loader = get_joint_loader(args, tasks)
-
-    all_loss_per_batch = []
-    for epoch in range(1, args.epochs + 1):
-        model.train()
-
-        total_loss = 0
-        for batch_idx, (images, labels) in enumerate(joint_loader):
-            optimizer.zero_grad()
-            images, labels = images.cuda(), labels.cuda()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-
-        loss_per_batch = total_loss / (batch_idx + 1)
-        log.info(f'Epoch {epoch} avg loss per batch: {loss_per_batch * 100:.4f}')
-
-        all_loss_per_batch.append(loss_per_batch)
-        if loss_per_batch <= min(all_loss_per_batch):
-            save(model.state_dict(), f'{results_folder_path}{args.task}.pt')
-
-        if not scheduler.step(loss_per_batch):
-            log.info("Finished training")
-            return
 
