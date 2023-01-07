@@ -5,11 +5,14 @@ from statistics import mean
 import torch
 
 import globals
+from models.yolo import Model
 from utils.data_loader import get_loader, set_severity, set_yolo_save_dir
+from utils.google_utils import attempt_download
 from utils.results_manager import ResultsManager
 from utils.testing import test
 from utils.testing_yolov3 import test as test_yolo
-from utils.torch_utils import select_device
+from utils.torch_utils import (intersect_dicts, select_device,
+                               torch_distributed_zero_first)
 from utils.training import train
 from utils.training_yolov3 import train as train_yolo
 
@@ -47,7 +50,9 @@ def disjoint(net, args, scenario='online'):
                 continue
             test_loader = get_loader(args, split='test', pad=0.5, rect=True)
             if args.model == 'yolov3':
-                res = test_yolo(model=net, dataloader=test_loader)[0] * 100
+                res = test_yolo(model=net, dataloader=test_loader,
+                                iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                                augment=args.augment)[0] * 100
             else:
                 res = test(test_loader, net)[0] * 100
             current_results.append(res)
@@ -69,12 +74,7 @@ def setup_net(net, args, ckpt_folder, idx, scenario):
         if args.model == 'yolov3':
             device = select_device(args.device, batch_size=args.batch_size)
 
-            if scenario == 'offline' and args.start_disjoint_offline_from_coco:
-                from models.yolo import Model
-                from utils.google_utils import attempt_download
-                from utils.torch_utils import (intersect_dicts,
-                                               torch_distributed_zero_first)
-
+            if scenario == 'offline' and not args.start_disjoint_offline_from_initial:
                 log.info('Loading yolov3.pt weights')
                 hyp = args.yolo_hyp()
                 with torch_distributed_zero_first(args.global_rank):

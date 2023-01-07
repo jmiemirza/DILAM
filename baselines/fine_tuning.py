@@ -4,8 +4,8 @@ from statistics import mean
 
 from torch import load
 
-import globals
 import config
+import globals
 from utils.data_loader import get_loader, set_severity, set_yolo_save_dir
 from utils.results_manager import ResultsManager
 from utils.testing import test
@@ -49,7 +49,9 @@ def fine_tuning(net, args, scenario='online'):
                 continue
             test_loader = get_loader(args, split='test', pad=0.5, rect=True)
             if args.model == 'yolov3':
-                res = test_yolo(model=net, dataloader=test_loader)[0] * 100
+                res = test_yolo(model=net, dataloader=test_loader,
+                                iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                                augment=args.augment)[0] * 100
             else:
                 res = test(test_loader, net)[0] * 100
             current_results.append(res)

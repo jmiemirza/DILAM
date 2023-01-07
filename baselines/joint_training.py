@@ -47,7 +47,9 @@ def joint_training(net, args, scenario='online'):
             test_loader = get_loader(args, split='test', pad=0.5, rect=True)
 
             if args.model == 'yolov3':
-                res = test_yolo(model=net, dataloader=test_loader)[0] * 100
+                res = test_yolo(model=net, dataloader=test_loader,
+                                iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                                augment=args.augment)[0] * 100
             else:
                 res = test(test_loader, net)[0] * 100
 

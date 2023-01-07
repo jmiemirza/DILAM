@@ -4,8 +4,8 @@ from statistics import mean
 
 from torch import load, save
 
-import globals
 import config
+import globals
 from utils.data_loader import get_loader, set_severity, set_yolo_save_dir
 from utils.results_manager import ResultsManager
 from utils.testing import test
@@ -57,7 +57,9 @@ def freezing(net, args, scenario='online'):
             setup_net(net, args, ckpt_folder, idx, scenario)
             test_loader = get_loader(args, split='test', pad=0.5, rect=True)
             if args.model == 'yolov3':
-                res = test_yolo(model=net, dataloader=test_loader)[0] * 100
+                res = test_yolo(model=net, dataloader=test_loader,
+                                iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                                augment=args.augment)[0] * 100
             else:
                 res = test(test_loader, net)[0] * 100
             current_results.append(res)
@@ -90,7 +92,14 @@ def setup_net(net, args, ckpt_folder, idx, scenario):
                 # we are selecting all layers that don't contain '28' to be frozen
                 freeze = [n for n, _ in list(net.named_parameters()) if '28' not in n]
                 set_yolo_save_dir(args, 'freezing', scenario)
-                train_yolo(hyp, args, device, model=net, freeze=freeze, heads_save_path=ckpt_path)
+                train_yolo(hyp, args, device, model=net, freeze=freeze)
+
+                # save trained detect heads
+                f_ckpt = {}
+                for k, v in net.named_parameters():
+                    if '28' in k:
+                        f_ckpt[k] = v
+                save(f_ckpt, ckpt_path)
             else:
                 log.info(f'No checkpoint for Freezing Task-{idx} '
                         f'({args.task}) - Starting training.')
@@ -124,9 +133,10 @@ def save_initial_task_heads(args, net, ckpt_folder):
 
 def move_existing_head_checkpoints(ckpt_folder):
     import glob
+    import os
     import shutil
     from pathlib import Path
-    import os
+
     from utils.general import increment_path
 
     files = glob.glob(join(ckpt_folder, '*.pt'))

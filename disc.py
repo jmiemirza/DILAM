@@ -19,8 +19,8 @@ def disc(args, net):
     bn_stats_file_name = f'{get_all_severities_str(args)}BN_stats.pt'
     if not args.no_disc_adaption:
         disc_adaption(args, net, True, True, bn_stats_file_name)
-    # disc_plug_and_play(args, net, f'{get_all_severities_str(args)}BN_stats.pt')
-    fast_disc_plug_and_play(args, net, f'{get_all_severities_str(args)}BN_stats.pt')
+    disc_plug_and_play(args, net, f'{get_all_severities_str(args)}BN_stats.pt')
+    # fast_disc_plug_and_play(args, net, f'{get_all_severities_str(args)}BN_stats.pt')
 
 
 def disc_adaption(args, net, save_bn_stats=True, use_training_data=True, save_fname=None):
@@ -60,7 +60,9 @@ def disc_plug_and_play(args, net, bn_file_name=None):
             load_bn_stats(net, args.task, ckpt)
             test_loader = get_loader(args, split='test', pad=0.5, rect=True)
             if args.model == 'yolov3':
-                res = test_yolo(model=net, dataloader=test_loader)[0] * 100
+                res = test_yolo(model=net, dataloader=test_loader,
+                                iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                                augment=args.augment)[0] * 100
             else:
                 res = test(test_loader, net)[0] * 100
             current_results.append(res)
@@ -133,7 +135,9 @@ def fast_disc_plug_and_play(args, net, bn_file_name=None):
         load_bn_stats(net, args.task, ckpt)
         test_loader = get_loader(args, split='test', pad=0.5, rect=True)
         if args.model == 'yolov3':
-            res = test_yolo(model=net, dataloader=test_loader)[0] * 100
+            res = test_yolo(model=net, dataloader=test_loader,
+                            iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                            augment=args.augment)[0] * 100
         else:
             res = test(test_loader, net)[0] * 100
         current_results.append(res)

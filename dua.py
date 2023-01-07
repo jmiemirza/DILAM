@@ -61,7 +61,9 @@ def dua(args, net, save_bn_stats=False, use_training_data=False, save_fname=None
             train_loader = valid_loader = get_loader(args, split='test', pad=0.5, rect=True)
 
         if args.model == 'yolov3':
-            res = test_yolo(model=net, dataloader=valid_loader)[0] * 100
+            res = test_yolo(model=net, dataloader=valid_loader,
+                            iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                            augment=args.augment)[0] * 100
         else:
             res = test(valid_loader, net)[0] * 100
         log.info(f'{metric} Before Adaptation: {res:.1f}')
@@ -79,7 +81,9 @@ def dua(args, net, save_bn_stats=False, use_training_data=False, save_fname=None
             _ = net(inputs)
             net.eval()
             if args.model == 'yolov3':
-                res = test_yolo(model=net, dataloader=valid_loader)[0] * 100
+                res = test_yolo(model=net, dataloader=valid_loader,
+                                iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                                augment=args.augment)[0] * 100
             else:
                 res = test(valid_loader, net)[0] * 100
             results.append(res)
