@@ -115,7 +115,7 @@ def get_dataset(args, split=None, pad=0.0, aug=False, rect=False, joint=False):
 
     elif args.dataset == 'kitti':
         path = join(args.dataroot, f'{split}.txt')
-        img_size_idx = split == 'train'
+        img_size_idx = split != 'train'
         img_size = check_img_size(img_size=args.img_size[img_size_idx], s=args.gs)
         img_dirs_paths = []
         if joint:

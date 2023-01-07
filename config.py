@@ -9,66 +9,57 @@ ROBUSTNESS_TASKS = [
 
 KITTI_TASKS = ['fog', 'rain', 'snow']
 
-# # KITTI_TASKS = ['fog', 'rain', 'snow'] # orig
 # KITTI_TASKS = ['rain', 'fog', 'snow']
-# # KITTI_TASKS = ['snow', 'rain', 'fog']
 
-
-# Variables here are initialized with exemplary values and will be overwritten
-# based on commandline arguments
-# SEVERTITIES = ['5']
-# ROBUSTNESS_SEVERITIES = ['5', '4', '3', '2', '1']
-# KITTI_SEVERITIES = {
-#     'fog': ['fog_30', 'fog_40', 'fog_50'],
-#     'rain': ['200mm', '100mm', '75mm'],
-#     'snow': ['5']
-# }
-# TASKS = []
-
-# # TODO tmp
-# ROBUSTNESS_TASKS = ['gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur']
+# KITTI_TASKS = ['snow', 'rain', 'fog']
 
 
 PATHS = {
     'sl': {
-        'Windows': {
-            'cifar10': {
-                'root': 'X:/thesis/CIFAR-10-C',
-                'ckpt': 'X:/thesis/framework/checkpoints/cifar10/wrn/Hendrycks2020AugMixWRN.pt',
-            },
-            'imagenet-mini': {
-                'root': 'X:/thesis/imagenet-mini',
-                # 'ckpt': 'X:/thesis/framework/checkpoints/imagenet-mini/res18/initialDefaultLearn.pt',
-                'ckpt': 'X:/thesis/res18_imgnet_default.pt',
-            },
-            'imagenet': {
-                'root': 'X:/thesis/imagenet',
-                'ckpt': 'X:/thesis/res18_imgnet_default.pt',
-            },
-            'kitti': {
-                'root': 'X:/thesis/kitti',
-                'ckpt': 'X:/thesis/YOLOv3_clear_kitti_pretrained.pt',
-            },
+        'cifar10': {
+            'root': '/mnt/linux_data/datasets/cifar10',
+            'ckpt': '/home/sleitner/space/framework/checkpoints/cifar10/wrn/Hendrycks2020AugMixWRN.pt',
         },
-        'Linux': {
-            'cifar10': {
-                'root': '/mnt/linux_data/datasets/cifar10',
-                'ckpt': '/home/sleitner/space/framework/checkpoints/cifar10/wrn/Hendrycks2020AugMixWRN.pt',
-            },
-            'imagenet-mini': {
-                'root': '/mnt/linux_data/datasets/imagenet-mini',
-                # 'ckpt': '/home/sleitner/space/framework/checkpoints/imagenet-mini/res18/initialDefaultLearn.pt',
-                # 'ckpt': '/home/sleitner/space/framework/checkpoints/imagenet-mini/res18/res18_imgnet_default.pt',
-                'ckpt': None
-            },
-            'imagenet': {
-                'root': '/mnt/linux_data/datasets/imagenet',
-                'ckpt': '/home/sleitner/space/framework/checkpoints/imagenet/res18/res18_imgnet_default.pt',
-            },
-            'kitti': {
-                'root': '/mnt/linux_data/datasets/kitti',
-                'ckpt': '/home/sleitner/space/framework/YOLOv3_clear_kitti_pretrained.pt',
-            },
+        'imagenet-mini': {
+            'root': '/mnt/linux_data/datasets/imagenet-mini',
+            # 'ckpt': '/home/sleitner/space/framework/checkpoints/imagenet-mini/res18/initialDefaultLearn.pt',
+            # 'ckpt': '/home/sleitner/space/framework/checkpoints/imagenet-mini/res18/res18_imgnet_default.pt',
+            'ckpt': None
+        },
+        'imagenet': {
+            'root': '/mnt/linux_data/datasets/imagenet',
+            'ckpt': '/home/sleitner/space/framework/checkpoints/imagenet/res18/res18_imgnet_default.pt',
+        },
+        'kitti': {
+            'root': '/mnt/linux_data/datasets/kitti',
+            'ckpt': '/home/sleitner/space/framework/YOLOv3_clear_kitti_pretrained.pt',
+        },
+    },
+
+    'krios': {
+        'kitti': {
+            'root': '/data/leitner/kitti/',
+            'ckpt': '/data/leitner/framework_cls/clear.pt',
+        },
+    },
+
+    'win': {
+        'cifar10': {
+            'root': 'X:/thesis/CIFAR-10-C',
+            'ckpt': 'X:/thesis/framework/checkpoints/cifar10/wrn/Hendrycks2020AugMixWRN.pt',
+        },
+        'imagenet-mini': {
+            'root': 'X:/thesis/imagenet-mini',
+            # 'ckpt': 'X:/thesis/framework/checkpoints/imagenet-mini/res18/initialDefaultLearn.pt',
+            'ckpt': 'X:/thesis/res18_imgnet_default.pt',
+        },
+        'imagenet': {
+            'root': 'X:/thesis/imagenet',
+            'ckpt': 'X:/thesis/res18_imgnet_default.pt',
+        },
+        'kitti': {
+            'root': 'X:/thesis/kitti',
+            'ckpt': 'X:/thesis/YOLOv3_clear_kitti_pretrained.pt',
         },
     },
 }
@@ -155,6 +146,7 @@ LOGGER_CFG = {
     }
 }
 
+# Filtering logger tag prefixes
 class ContextFilter:
     def filter(self, record):
         split_name = record.name.split('.', 1)
@@ -165,6 +157,7 @@ class ContextFilter:
             if len(split_name) > 1:
                 record.name = split_name[0]
         return True
+
 
 YOLO_HYP = {
     # !! lr0 will be overwritten by args.lr !!
@@ -197,4 +190,5 @@ YOLO_HYP = {
     'mosaic': 1.0,          # image mosaic (probability)
     'mixup': 0.0            # image mixup (probability)
 }
+
 

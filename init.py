@@ -22,9 +22,8 @@ log = logging.getLogger('MAIN')
 
 
 def set_paths(args):
-    import platform
-    args.dataroot = config.PATHS[args.usr][platform.system()][args.dataset]['root']
-    args.ckpt_path = config.PATHS[args.usr][platform.system()][args.dataset]['ckpt']
+    args.dataroot = config.PATHS[args.usr][args.dataset]['root']
+    args.ckpt_path = config.PATHS[args.usr][args.dataset]['ckpt']
 
 
 def init_net(args):
@@ -53,8 +52,8 @@ def init_net(args):
 
     elif args.model == 'res18':
         num_classes = 200 if args.dataset == 'tiny-imagenet' else 1000
+        # if no checkpoint provided start from the pretrained one
         if not args.ckpt_path:
-            # if not checkpoint is provided start from the pretrained one
             if torchvision_version.startswith(('0.11', '0.12')):
                 net = tv_models.resnet18(pretrained=True, norm_layer=norm_layer, num_classes=num_classes)
             else:
@@ -133,7 +132,10 @@ def init_settings(args):
     if args.dataset == 'kitti':
         if not args.model:
             args.model = 'yolov3'
-        globals.TASKS = config.KITTI_TASKS
+        if args.tasks:
+            globals.TASKS = args.tasks
+        else:
+            globals.TASKS = config.KITTI_TASKS
         args.num_severities = max([len(args.fog_severities),
                                    len(args.rain_severities),
                                    len(args.snow_severities)])
@@ -161,7 +163,10 @@ def init_settings(args):
         args.names = ['Car', 'Van', 'Truck', 'Pedestrian', 'Person_sitting',
                       'Cyclist', 'Tram', 'Misc']
     else:
-        globals.TASKS = config.ROBUSTNESS_TASKS
+        if args.tasks:
+            globals.TASKS = args.tasks
+        else:
+            globals.TASKS = config.ROBUSTNESS_TASKS
         if args.dataset in ['imagenet', 'imagenet-mini']:
             from utils.datasets import ImgNet
             ImgNet.initial_dir = args.dataset

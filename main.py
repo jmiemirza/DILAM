@@ -5,6 +5,7 @@ import sys
 import time
 from argparse import Namespace
 
+import torch
 import torch.backends.cudnn as cudnn
 from datetime import datetime
 import baselines
@@ -14,8 +15,6 @@ from init import init_net, init_settings, initial_checks, set_paths
 from utils.results_manager import ResultsManager
 from utils.utils import timedelta_to_str
 
-# logging.config.dictConfig(config.LOGGER_CFG)
-# log = logging.getLogger('MAIN')
 
 
 def main(args):
@@ -39,57 +38,41 @@ def main(args):
     init_settings(args)
     if args.usr:
         set_paths(args)
-    net = init_net(args)
-    initial_checks(net, args)
 
-    # TODO fixed initial task lr being set with yolo.. untested tho
-    # this also changed lr adjustment in warmup
+    for run in range(args.num_runs):
+        net = init_net(args)
+        for args.severity_idx in range(args.num_severities):
+            if not args.no_disc:
+                disc(args, net)
+            if 'source_only' in args.baselines:
+                baselines.source_only(net, args)
+            for scenario in args.scenario:
+                if 'disjoint' in args.baselines:
+                    baselines.disjoint(net, args, scenario)
+                if 'freezing' in args.baselines:
+                    baselines.freezing(net, args, scenario)
+                if 'fine_tuning' in args.baselines:
+                    baselines.fine_tuning(net, args, scenario)
+                if 'joint_training' in args.baselines:
+                    baselines.joint_training(net, args, scenario)
 
-    # By default only the highest severity is used. This can be changed using
-    # the --(robustness/fog/rain/snow)_severities commandline arguments.
-    # Multiple severities can be listed, but for the KITTI dataset keep in mind
-    # that the different severities are accessed by the same index.
-    # Meaning if for example the results for two different fog severities,
-    # with everything else staying the same, are needed, the other tasks
-    # severities need to be listed twice, like this:
-    # --fog_severities fog_30 fog_40
-    # --rain_severities 200m 200m
-    # --snow_severities 5 5
-    #
-    # Running DISC can be skipped by using --no_disc
-    # Running DISC adaption phase can be skipped by using --no_disc_adaption
-    # in which case the batch norm running estimates checkpoint from a previous
-    # run will be used.
-    # By default all baselines are ran.
-    # Specific baselines to run can be listed using --baselines
-    # Baselines can be skipped entirely by using --baselines without listing
-    # any baselines to run
-    #
-    # "online" and/or "offline" scenario can be specified using --scenario
-    # by default both scenarios are ran.
-    #
-    for args.severity_idx in range(args.num_severities):
-        if not args.no_disc:
-            disc(args, net)
-        if 'source_only' in args.baselines:
-            baselines.source_only(net, args)
-        for scenario in args.scenario:
-            if 'disjoint' in args.baselines:
-                baselines.disjoint(net, args, scenario)
-            if 'freezing' in args.baselines:
-                baselines.freezing(net, args, scenario)
-            if 'fine_tuning' in args.baselines:
-                baselines.fine_tuning(net, args, scenario)
-            if 'joint_training' in args.baselines:
-                baselines.joint_training(net, args, scenario)
+            # plot & log results summary for every severity index
+            if results.has_results():
+                timestamp_str = time.strftime('%b-%d-%Y_%H%M', time.localtime())
+                results.save_to_file(file_name=f'{timestamp_str}_raw_results.pkl')
+                results.print_summary_latex()
+                results.plot_summary(f'{timestamp_str}_summary_plot.png')
 
-        # plot & log results summary for every severity index
-        timestamp_str = time.strftime('%b-%d-%Y_%H%M', time.localtime())
-        if results.has_results():
-            results.save_to_file(file_name=f'{timestamp_str}_raw_results.pkl')
-            results.print_summary_latex()
-            results.plot_summary(f'{timestamp_str}_summary_plot.png')
+                if args.num_runs > 1:
+                    results.reset_results()
+                    log.info(f'{">" * 50} FINISHED RUN #{run} {"<" * 50}')
+                    runtime = datetime.now() - start_time
+                    log.info(f'Runtime so far: {timedelta_to_str(runtime)}')
+                    del net
+                    torch.cuda.empty_cache()
 
+    if args.num_runs > 1:
+        results.print_multiple_runs_results()
 
     runtime = datetime.now() - start_time
     log.info(f'Execution finished in {timedelta_to_str(runtime)}')
@@ -106,6 +89,7 @@ sys.excepthook = handle_exception
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+
     parser.add_argument('--usr', default=None, type=str)
     parser.add_argument('--dataroot', default='path/to/dataroot')
     parser.add_argument('--ckpt_path', default='path/to/checkpoint.pt')
@@ -114,6 +98,8 @@ if __name__ == '__main__':
     parser.add_argument('--logfile', default='log.txt', type=str)
 
     # General run settings
+    parser.add_argument('--tasks', default=[], type=str, nargs='*',
+                        help='List of tasks to run (in given order), empty means defaults from config.py')
     all_baselines = ['source_only', 'disjoint', 'freezing', 'fine_tuning', 'joint_training']
     parser.add_argument('--baselines', default=all_baselines, type=str, nargs='*',
                         help='List of baselines to run')
@@ -124,6 +110,7 @@ if __name__ == '__main__':
     parser.add_argument('--rain_severities', default=['200mm'], type=str, nargs='*')
     parser.add_argument('--snow_severities', default=['5'], type=str, nargs='*')
     parser.add_argument('--checkpoints_path', default='checkpoints', help='path where model checkpoints will be saved')
+    parser.add_argument('--num_runs', default=1, type=int)
 
     # DUA/DISC adaption
     parser.add_argument('--num_samples', default=50, type=int)
@@ -144,6 +131,9 @@ if __name__ == '__main__':
                         help='how yolov3 training reduces learning rate')
 
     # LR scheduler and early stopping
+    # for yolov3 these setting only apply with yolo_lr_adjustment set to 'thirds',
+    # in which case the reduction by a factor of 3 can also be changed by setting
+    # lr_factor to a different value
     parser.add_argument('--patience', default=4, type=int)
     parser.add_argument('--lr_factor', default=1/3, type=float)
     parser.add_argument('--verbose', default=True, type=bool)
@@ -164,16 +154,16 @@ if __name__ == '__main__':
     parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
     parser.add_argument('--img_size', nargs='+', type=int, default=[640, 640], help='[train, test] image sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
-    # disabled
-    # parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--device', default='3', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    # parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
-    parser.add_argument('--start_disjoint_offline_from_coco', action='store_true',
-                        help='start offline disjoint training from checkpoint trained on MS COCO')
+    parser.add_argument('--start_disjoint_offline_from_initial', action='store_true',
+                        help='start offline disjoint training from checkpoint trained on initial task')
     parser.add_argument('--use_freezing_heads_ckpts', action='store_true',
                         help='Use freezing baseline heads from a previous run. '
                              'Without this option previously saved heads are moved.')
+    parser.add_argument('--conf_thres', type=float, default=0.001, help='object confidence threshold')
+    parser.add_argument('--iou_thres', type=float, default=0.6, help='IOU threshold for NMS')
+    parser.add_argument('--augment', default = False, action='store_true', help='augmented inference')
     # yolov3 untested
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
     parser.add_argument('--notest', action='store_true', help='only test final epoch')

@@ -10,6 +10,7 @@ class ResultsManager():
     """
     _instance = None
     log = logging.getLogger('MAIN.RESULTS')
+    multi_run_res = {}
 
     def __new__(cls, _=None):
         if cls._instance is None:
@@ -55,6 +56,36 @@ class ResultsManager():
             'scenario': scenario
         }])
         self.results = pd.concat([self.results, entry], ignore_index=True)
+
+        if method not in self.multi_run_res:
+            self.multi_run_res[method] = {}
+        if scenario not in self.multi_run_res[method]:
+            self.multi_run_res[method][scenario] = {}
+        if task not in self.multi_run_res[method][scenario]:
+            self.multi_run_res[method][scenario][task] = []
+
+        self.multi_run_res[method][scenario][task].append(value)
+
+
+    def print_multiple_runs_results(self):
+        from statistics import mean, variance, stdev
+
+        self.log.info('------------ Multi run results ------------')
+        for method, v2 in self.multi_run_res.items():
+            self.log.info(f'\nMethod: {method}')
+            for scenario, v1 in v2.items():
+                self.log.info(f'\t\tScenario: {scenario}')
+                for task, v in v1.items():
+                    self.log.info(f'\t\tTask: {task}, v content: {v}')
+                    self.log.info(f'\t\tMEAN: {mean(v)}, VAR: {variance(v)}, STDEV {stdev(v)}')
+        self.log.info('-------------------------------------------')
+
+
+    def reset_results(self):
+        if hasattr(self, 'summary'):
+            delattr(self, 'summary')
+        columns = ['method', 'task', 'value', 'scenario']
+        self.results = pd.DataFrame(columns=columns)
 
 
     def generate_summary(self):

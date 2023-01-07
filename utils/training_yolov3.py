@@ -38,8 +38,7 @@ from utils.training import ReduceLROnPlateauEarlyStop
 logger = logging.getLogger('TRAINING')
 
 
-def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False,
-          heads_save_path='', freeze=[]):
+def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False, freeze=[]):
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
     save_dir, epochs, batch_size, total_batch_size, weights, rank = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.total_batch_size, opt.weights, opt.global_rank
@@ -63,9 +62,9 @@ def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False,
 
     # Freeze
     for k, v in model.named_parameters():
-        v.requires_grad = True  # train all layers
+        v.requires_grad = True
         if any(x in k for x in freeze):
-            v.requires_grad = False  # dont train these layers
+            v.requires_grad = False
 
     # Optimizer
     nbs = 64  # nominal batch size
@@ -206,10 +205,13 @@ def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False,
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         model.train()
 
+        # if any layers are frozen, set all batchnorm layers which have requires_grad
+        # set to False also to eval() mode, to freeze their running estimates
         if len(freeze):
             for m in model.modules():
                 if isinstance(m, nn.modules.batchnorm._BatchNorm):
-                    m.eval()
+                    if not m.get_parameter('weight').requires_grad:
+                        m.eval()
 
         # Update image weights (optional)
         if opt.image_weights:
@@ -314,16 +316,17 @@ def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False,
                 ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride', 'class_weights'])
             final_epoch = epoch + 1 == epochs
             if not opt.notest or final_epoch:  # Calculate mAP
-                map50, results, maps, times = test(None,#opt.data,
-                                                   batch_size=total_batch_size,
-                                                   imgsz=imgsz_test,
-                                                   model=ema.ema,
-                                                   single_cls=opt.single_cls,
-                                                   dataloader=testloader,
-                                                   save_dir=save_dir,
-                                                   plots=plots and final_epoch,
-                                                   log_imgs=opt.log_imgs if wandb else 0,
-                                                   training=True)
+                map50, results, maps, times, _ = test(batch_size=total_batch_size,
+                                                      imgsz=imgsz_test,
+                                                      model=ema.ema,
+                                                      single_cls=opt.single_cls,
+                                                      dataloader=testloader,
+                                                      save_dir=save_dir,
+                                                      plots=plots and final_epoch,
+                                                      training=True,
+                                                      iou_thres=opt.iou_thres,
+                                                      conf_thres=opt.conf_thres,
+                                                      augment=opt.augment)
 
             # Write
             with open(results_file, 'a') as f:
@@ -369,15 +372,6 @@ def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False,
                 if best_fitness == fi:
                     torch.save(ckpt, best)
 
-                    # Save best detect layers
-                    if len(freeze):
-                        f_ckpt = {}
-                        for k, v in ema.ema.named_parameters():
-                            if '28' in k:
-                                # print('saving layer', k)
-                                f_ckpt[k] = v
-                        torch.save(f_ckpt, heads_save_path)
-
                 del ckpt
 
             if opt.yolo_lr_adjustment in ['linear_lr', 'cosine']:
@@ -409,6 +403,12 @@ def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False,
                 strip_optimizer(f)  # strip optimizers
         if opt.bucket:
             os.system(f'gsutil cp {final} gs://{opt.bucket}/weights')  # upload
+
+        # Load best.pt checkpoint
+        logger.info(f'End of training - Loading best.pt: {best}')
+        ckpt = torch.load(best, map_location=device)  # load checkpoint
+        state_dict = ckpt['model'].float().state_dict()  # to FP32
+        model.load_state_dict(state_dict)#, strict=False)  # load
 
         # Plots
         if plots:

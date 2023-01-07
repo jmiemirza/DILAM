@@ -24,13 +24,10 @@ logger = logging.getLogger('TESTING')
 logger_fileonly = logging.getLogger('TESTING.FILEONLY')
 
 @torch.no_grad()
-def test(data=None,
-         weights=None,
-         batch_size=32,
+def test(batch_size=32,
          imgsz=1216,
          conf_thres=0.001,
          iou_thres=0.6,  # for NMS
-         save_json=False,
          single_cls=False,
          augment=False,
          verbose=False,
@@ -39,12 +36,11 @@ def test(data=None,
          save_dir=Path(''),  # for saving images
          save_txt=False,  # for auto-labelling
          save_hybrid=False,  # for hybrid auto-labelling
-         save_conf=False,  # save auto-label confidences
          plots=False,
-         log_imgs=0,
          half_precision = False,
          nc=8,
-         training=False):  # number of logged images
+         training=False,
+         multi_label=False):  # number of logged images
 
     assert model and dataloader, 'Model and Loader need to be passed to yolov3 test'
 
@@ -76,7 +72,7 @@ def test(data=None,
         targets = targets.to(device)
         nb, _, height, width = img.shape  # batch size, channels, height, width
 
-        with torch.no_grad():
+        with torch.no_grad(): # TODO should be redundant because of decorator @torch.no_grad()
             # Run model
             t = time_synchronized()
             inf_out, train_out = model(img, augment=augment)  # inference and training outputs
@@ -90,7 +86,8 @@ def test(data=None,
             targets[:, 2:] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
             lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
             t = time_synchronized()
-            output = non_max_suppression(inf_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb)
+            output = non_max_suppression(inf_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb,
+                                         multi_label=multi_label, agnostic=single_cls)
             t1 += time_synchronized() - t
 
 
@@ -108,39 +105,10 @@ def test(data=None,
                 continue
 
             # Predictions
+            if single_cls:
+                pred[:, 5] = 0
             predn = pred.clone()
             scale_coords(img[si].shape[1:], predn[:, :4], shapes[si][0], shapes[si][1])  # native-space pred
-
-            # Append to text file
-            # if save_txt:
-            #     gn = torch.tensor(shapes[si][0])[[1, 0, 1, 0]]  # normalization gain whwh
-            #     for *xyxy, conf, cls in predn.tolist():
-            #         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-            #         line = (cls, *xywh, conf) if save_conf else (cls, *xywh)  # label format
-            #         with open(save_dir / 'labels' / (path.stem + '.txt'), 'a') as f:
-            #             f.write(('%g ' * len(line)).rstrip() % line + '\n')
-
-            # W&B logging
-            # if plots and len(wandb_images) < log_imgs:
-            #     box_data = [{"position": {"minX": xyxy[0], "minY": xyxy[1], "maxX": xyxy[2], "maxY": xyxy[3]},
-            #                  "class_id": int(cls),
-            #                  "box_caption": "%s %.3f" % (names[cls], conf),
-            #                  "scores": {"class_score": conf},
-            #                  "domain": "pixel"} for *xyxy, conf, cls in pred.tolist()]
-            #     boxes = {"predictions": {"box_data": box_data, "class_labels": names}}  # inference-space
-            #     wandb_images.append(wandb.Image(img[si], boxes=boxes, caption=path.name))
-
-            # Append to pycocotools JSON dictionary
-            # if save_json:
-            #     # [{"image_id": 42, "category_id": 18, "bbox": [258.15, 41.29, 348.26, 243.78], "score": 0.236}, ...
-            #     image_id = int(path.stem) if path.stem.isnumeric() else path.stem
-            #     box = xyxy2xywh(predn[:, :4])  # xywh
-            #     box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
-            #     for p, b in zip(pred.tolist(), box.tolist()):
-            #         jdict.append({'image_id': image_id,
-            #                       'category_id': coco91class[int(p[5])] if is_coco else int(p[5]),
-            #                       'bbox': [round(x, 3) for x in b],
-            #                       'score': round(p[4], 5)})
 
             # Assign all predictions as incorrect
             correct = torch.zeros(pred.shape[0], niou, dtype=torch.bool, device=device)
@@ -189,7 +157,6 @@ def test(data=None,
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
     if len(stats) and stats[0].any():
         p, r, ap, f1, ap_class = ap_per_class(*stats, plot=plots, save_dir=save_dir, names=names)
-        # p, r, ap50, ap = p[:, 0], r[:, 0], ap[:, 0], ap.mean(1)  # [P, R, AP@0.5, AP@0.5:0.95]
         ap50, ap = ap[:, 0], ap.mean(1)  # AP@0.5, AP@0.5:0.95
         mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
@@ -198,7 +165,6 @@ def test(data=None,
 
     # Print results
     pf = '%20s' + '%12.3g' * 6  # print format
-    # if not training: # TODO if print_map maybe?
     logger_fileonly.info(s)
     logger.info(pf % ('all', seen, nt.sum(), mp, mr, map50, map))
 
@@ -213,36 +179,8 @@ def test(data=None,
         logger.info('Speed: %.1f/%.1f/%.1f ms inference/NMS/total per image at batch-size %g' % t)
 
     # Plots
-    # if plots:
-    #     confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
-    #     if wandb and wandb.run:
-    #         wandb.log({"Images": wandb_images})
-    #         wandb.log({"Validation": [wandb.Image(str(f), caption=f.name) for f in sorted(save_dir.glob('test*.jpg'))]})
-
-    # Save JSON
-    # if save_json and len(jdict):
-    #     w = Path(weights[0] if isinstance(weights, list) else weights).stem if weights is not None else ''  # weights
-    #     anno_json = '../coco/annotations/instances_val2017.json'  # annotations json
-    #     pred_json = str(save_dir / f"{w}_predictions.json")  # predictions json
-    #     print('\nEvaluating pycocotools mAP... saving %s...' % pred_json)
-    #     with open(pred_json, 'w') as f:
-    #         json.dump(jdict, f)
-
-    #     try:  # https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/pycocoEvalDemo.ipynb
-    #         from pycocotools.coco import COCO
-    #         from pycocotools.cocoeval import COCOeval
-
-    #         anno = COCO(anno_json)  # init annotations api
-    #         pred = anno.loadRes(pred_json)  # init predictions api
-    #         eval = COCOeval(anno, pred, 'bbox')
-    #         if is_coco:
-    #             eval.params.imgIds = [int(Path(x).stem) for x in dataloader.dataset.img_files]  # image IDs to evaluate
-    #         eval.evaluate()
-    #         eval.accumulate()
-    #         eval.summarize()
-    #         map, map50 = eval.stats[:2]  # update results (mAP@0.5:0.95, mAP@0.5)
-    #     except Exception as e:
-    #         print(f'pycocotools unable to run: {e}')
+    if plots:
+        confusion_matrix.plot(save_dir=save_dir, names=list(names.values()))
 
     # Return results
     if not training:
@@ -252,5 +190,5 @@ def test(data=None,
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
-    return map50, (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t
+    return map50, (mp, mr, map50, map, *(loss.cpu() / len(dataloader)).tolist()), maps, t, ap50
 
