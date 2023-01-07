@@ -67,7 +67,7 @@ def eval_yolo_ckpts(net, args, scenario, baseline_str, ckpts=None):
         ckpts = { ...ckpts to evaluate... }
         for bl in ['disjoint', 'fine_tuning', 'joint_training']:
             for scenario in ['online', 'offline']:
-                eval_ckpts(net, args, scenario, bl, ckpts)
+                eval_yolo_ckpts(net, args, scenario, bl, ckpts)
     """
     import logging
     from utils.results_manager import ResultsManager
