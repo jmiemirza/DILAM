@@ -45,10 +45,6 @@ def print_nparams(model):
     print('number of parameters: %d' % (nparams))
 
 
-# def print_color(color, string):
-#     print(getattr(Fore, color) + string + Fore.RESET)
-
-
 def plot_adaptation_err(all_err_cls, corr, args):
     import matplotlib.pyplot as plt
     plt.switch_backend('agg')
@@ -60,6 +56,128 @@ def plot_adaptation_err(all_err_cls, corr, args):
     plt.legend()
     plt.savefig(os.path.join(args.outf, corr), format="png")
     plt.close(fig)
+
+
+def eval_yolo_ckpts(net, args, scenario, baseline_str, ckpts=None):
+    """
+        Evaluate yolov3 chekpoints from previous runs.
+
+        Example usage:
+        args.severity_idx = 0
+        ckpts = { ...ckpts to evaluate... }
+        for bl in ['disjoint', 'fine_tuning', 'joint_training']:
+            for scenario in ['online', 'offline']:
+                eval_ckpts(net, args, scenario, bl, ckpts)
+    """
+    import logging
+    from utils.results_manager import ResultsManager
+    from os.path import join
+    from utils.torch_utils import select_device
+    from utils.data_loader import get_loader, set_severity
+    from utils.testing_yolov3 import test as test_yolo
+    from statistics import mean
+    import globals
+
+    log = logging.getLogger('MAIN')
+
+    if not ckpts:
+        # yolov3 training results directories, by default settings found at:
+        # checkpoints/kitti/yolov3/ ...
+        ckpts = {
+            'disjoint': {
+                'online': {
+                    'fog': 'fog_fog_30_train_results',
+                    'rain': 'rain_200mm_train_results',
+                    'snow': 'snow_5_train_results'
+                },
+                'offline': {
+                    'fog': 'fog_fog_30_train_results',
+                    'rain': 'rain_200mm_train_results',
+                    'snow': 'snow_5_train_results'
+                }
+            },
+            'freezing': {
+                'online': {
+                    'fog': 'fog_fog_30_train_results',
+                    'rain': 'rain_200mm_train_results',
+                    'snow': 'snow_5_train_results'
+                },
+                'offline': {
+                    'fog': 'fog_fog_30_train_results',
+                    'rain': 'rain_200mm_train_results',
+                    'snow': 'snow_5_train_results'
+                }
+            },
+            'fine_tuning': {
+                'online': {
+                    'fog': 'fog_fog_30_train_results',
+                    'rain': 'rain_200mm_train_results',
+                    'snow': 'snow_5_train_results'
+                },
+                'offline': {
+                    'fog': 'fog_fog_30_train_results',
+                    'rain': 'rain_200mm_train_results',
+                    'snow': 'snow_5_train_results'
+                }
+            },
+            'joint_training': {
+                'online': {
+                    'fog': 'fog_fog_30_train_results',
+                    'rain': 'rain_200mm_train_results',
+                    'snow': 'snow_5_train_results'
+                },
+                'offline': {
+                    'fog': 'fog_fog_30_train_results',
+                    'rain': 'rain_200mm_train_results',
+                    'snow': 'snow_5_train_results'
+                }
+            },
+        }
+
+
+    args.severity_idx = 0
+    tasks = ['initial'] + globals.TASKS
+    results = ResultsManager('mAP@50')
+    device = select_device(args.device, batch_size=args.batch_size)
+
+    log.info(f'::: Running ckpt evaluations for baseline {baseline_str} ({scenario}) :::')
+    for idx, args.task in enumerate(tasks):
+        ckpt_folder = join(args.checkpoints_path, args.dataset, args.model, baseline_str, scenario)
+        if args.task == 'initial':
+            continue
+        current_results = []
+        if not set_severity(args):
+            continue
+        severity_str = '' if args.task == 'initial' else f'Severity: {args.severity}'
+        log.info(f'Start evaluation for Task-{idx} ({args.task}). {severity_str}')
+
+        # load ckpt
+        ckpt_folder = join(ckpt_folder, ckpts[baseline_str][scenario][args.task], 'weights')
+        ckpt_path = join(ckpt_folder, 'best.pt')
+        log.info(f'Loading: {ckpt_path}')
+        ckpt = torch.load(ckpt_path, map_location=device)  # load checkpoint
+        state_dict = ckpt['model'].float().state_dict()  # to FP32
+        net.load_state_dict(state_dict) # load
+
+        for i in range(0, idx + 1):
+            args.task = tasks[i]
+            if not set_severity(args):
+                continue
+
+            test_loader = get_loader(args, split='test', pad=0.5, rect=True)
+            res = test_yolo(model=net, dataloader=test_loader,
+                            iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                            augment=args.augment)[0] * 100
+
+            current_results.append(res)
+            log.info(f'\tmAP@50 on Task-{i} ({tasks[i]}): {res:.1f}')
+
+            if i == idx:
+                mean_result = mean(current_results)
+                log.info(f'\tMean mAP@50 over current task ({tasks[idx]}) '
+                         f'and previously seen tasks: {mean_result:.1f}')
+                severity_str = '' if args.task == 'initial' else f'{args.severity}'
+                results.add_result(baseline_str, f'{tasks[idx]} {severity_str}', mean_result, scenario)
 
 
 def timedelta_to_str(timedelta, explicit_days=False):
