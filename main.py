@@ -15,6 +15,7 @@ from init import init_net, init_settings, initial_checks, set_paths
 from utils.results_manager import ResultsManager
 from utils.utils import timedelta_to_str
 
+from actmad import test_adapt as actmad
 
 
 def main(args):
@@ -65,11 +66,12 @@ def main(args):
 
                 if args.num_runs > 1:
                     results.reset_results()
-                    log.info(f'{">" * 50} FINISHED RUN #{run} {"<" * 50}')
+                    log.info(f'{">" * 30} FINISHED RUN #{run} {"<" * 30}')
                     runtime = datetime.now() - start_time
                     log.info(f'Runtime so far: {timedelta_to_str(runtime)}')
-                    del net
                     torch.cuda.empty_cache()
+                    del net
+
 
     if args.num_runs > 1:
         results.print_multiple_runs_results()

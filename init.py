@@ -65,7 +65,10 @@ def init_net(args):
         tv_models.resnet.ResNet.get_heads = get_heads_classification
 
     elif args.model == 'yolov3':
+        if hasattr(args, 'orig_ckpt_path'):
+            args.ckpt_path = args.orig_ckpt_path
         if exists(args.ckpt_path):
+            args.orig_ckpt_path = args.ckpt_path
             net = attempt_load(args.ckpt_path, map_location=device)
             args.gs = max(int(net.stride.max()), 32)
             args.img_size = [check_img_size(x, args.gs) for x in args.img_size]
