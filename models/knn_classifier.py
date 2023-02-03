@@ -31,7 +31,7 @@ class KITTIWeatherKNNClassifier(KNeighborsClassifier):
         args.gs = 32
         hists = []
         labels = []
-        for label, args.task in enumerate(['initial'] + globals.TASKS):
+        for label, args.task in enumerate(globals.KITTI_CLS_WEATHER):
             set_severity(args)
             dataloader = get_loader(args, split='train', pad=pad, rect=rect)
             ldr = tqdm(enumerate(dataloader), total=len(dataloader), desc=args.task)
