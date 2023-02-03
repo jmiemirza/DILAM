@@ -110,6 +110,7 @@ LOGGER_CFG = {
         'MAIN.DUA': {},
         'MAIN.DATA': {},
         'MAIN.RESULTS': {},
+        'MAIN.KNN': {},
 
         'BASELINE': {
             'handlers': ['console_handler', 'file_handler'],

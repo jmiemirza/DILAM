@@ -7,7 +7,7 @@ from utils.data_loader import get_loader, set_severity
 import globals
 import logging
 
-log = logging.getLogger('KNN')
+log = logging.getLogger('MAIN.KNN')
 
 
 class KITTIWeatherKNNClassifier(KNeighborsClassifier):
