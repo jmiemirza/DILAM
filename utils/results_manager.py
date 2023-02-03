@@ -11,6 +11,7 @@ class ResultsManager():
     _instance = None
     log = logging.getLogger('MAIN.RESULTS')
     multi_run_res = {}
+    multi_run_res_map50to95 = {}
 
     def __new__(cls, _=None):
         if cls._instance is None:
@@ -67,17 +68,39 @@ class ResultsManager():
         self.multi_run_res[method][scenario][task].append(value)
 
 
+    def add_result_map50to95(self, method, task, value, scenario):
+        if method not in self.multi_run_res_map50to95:
+            self.multi_run_res_map50to95[method] = {}
+        if scenario not in self.multi_run_res_map50to95[method]:
+            self.multi_run_res_map50to95[method][scenario] = {}
+        if task not in self.multi_run_res_map50to95[method][scenario]:
+            self.multi_run_res_map50to95[method][scenario][task] = []
+        self.multi_run_res_map50to95[method][scenario][task].append(value)
+
+    def print_multiple_runs_results_map50to95(self):
+        from statistics import mean, variance, stdev
+        self.log.info('------------ map50to95s Multi run results ------------')
+        for method, v2 in self.multi_run_res_map50to95.items():
+            self.log.info(f'\nMethod: {method} map50to95s')
+            for scenario, v1 in v2.items():
+                self.log.info(f'\t\tScenario: {scenario}')
+                for task, v in v1.items():
+                    self.log.info(f'\t\tTask: {task}')#, v content: {v}')
+                    self.log.info(f'\t\tMEAN: {mean(v):.3f}, VAR: {variance(v):.3f}, STDEV {stdev(v):.3f}')
+        self.log.info('-------------------------------------------')
+
+
     def print_multiple_runs_results(self):
         from statistics import mean, variance, stdev
 
-        self.log.info('------------ Multi run results ------------')
+        self.log.info('------------ map50 Multi run results ------------')
         for method, v2 in self.multi_run_res.items():
             self.log.info(f'\nMethod: {method}')
             for scenario, v1 in v2.items():
                 self.log.info(f'\t\tScenario: {scenario}')
                 for task, v in v1.items():
-                    self.log.info(f'\t\tTask: {task}, v content: {v}')
-                    self.log.info(f'\t\tMEAN: {mean(v)}, VAR: {variance(v)}, STDEV {stdev(v)}')
+                    self.log.info(f'\t\tTask: {task}')#, v content: {v}')
+                    self.log.info(f'\t\tMEAN: {mean(v):.3f}, VAR: {variance(v):.3f}, STDEV {stdev(v):.3f}')
         self.log.info('-------------------------------------------')
 
 

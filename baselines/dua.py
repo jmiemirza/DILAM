@@ -15,27 +15,17 @@ log = logging.getLogger('MAIN.DUA')
 
 
 def dua(args, net, save_bn_stats=False, use_training_data=False, save_fname=None):
-    if args.model == 'yolov3':
-        get_adaption_inputs = get_adaption_inputs_kitti
-        metric = 'mAP@50'
-        tr_transform_adapt = transforms.Compose([
-            transforms.ToPILImage(),
-            # transforms.RandomCrop((192, 640)),
-            transforms.RandomCrop((224, 640)),
-            # transforms.RandomCrop((224, 672)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            # transforms.Normalize(*NORM)
-        ])
-    else:
-        get_adaption_inputs = get_adaption_inputs_default
-        metric = 'Error'
-        tr_transform_adapt = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(*NORM)
-        ])
+    get_adaption_inputs = get_adaption_inputs_kitti
+    metric = 'mAP@50'
+    tr_transform_adapt = transforms.Compose([
+        transforms.ToPILImage(),
+        # transforms.RandomCrop((192, 640)),
+        transforms.RandomCrop((224, 640)),
+        # transforms.RandomCrop((224, 672)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        # transforms.Normalize(*NORM)
+    ])
 
     ckpt = torch.load(args.ckpt_path)
     decay_factor = args.decay_factor
@@ -60,12 +50,10 @@ def dua(args, net, save_bn_stats=False, use_training_data=False, save_fname=None
             # original DUA is run on test data only
             train_loader = valid_loader = get_loader(args, split='test', pad=0.5, rect=True)
 
-        if args.model == 'yolov3':
-            res = test_yolo(model=net, dataloader=valid_loader,
-                            iou_thres=args.iou_thres, conf_thres=args.conf_thres,
-                            augment=args.augment)[0] * 100
-        else:
-            res = test(valid_loader, net)[0] * 100
+        res = test_yolo(model=net, dataloader=valid_loader,
+                        iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                        augment=args.augment)[0] * 100
+
         log.info(f'{metric} Before Adaptation: {res:.1f}')
 
         for i in tqdm(range(1, args.num_samples + 1)):
@@ -80,12 +68,9 @@ def dua(args, net, save_bn_stats=False, use_training_data=False, save_fname=None
             inputs = get_adaption_inputs(image, tr_transform_adapt, device)
             _ = net(inputs)
             net.eval()
-            if args.model == 'yolov3':
-                res = test_yolo(model=net, dataloader=valid_loader,
-                                iou_thres=args.iou_thres, conf_thres=args.conf_thres,
-                                augment=args.augment)[0] * 100
-            else:
-                res = test(valid_loader, net)[0] * 100
+            res = test_yolo(model=net, dataloader=valid_loader,
+                            iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                            augment=args.augment)[0] * 100
             results.append(res)
             if result_improved(metric, res, results):
                 save_bn_stats_in_model(net, args.task)
@@ -157,7 +142,6 @@ def save_bn_stats_to_file(net, dataset_str=None, model_str=None, file_name=None)
     """
         Saves net.bn_stats content to a file.
     """
-    # ckpt_folder = 'checkpoints/' + dataset_str + '/' + model_str + '/'
     ckpt_folder = join('checkpoints', dataset_str, model_str)
     make_dirs(ckpt_folder)
     if not file_name:

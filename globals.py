@@ -13,3 +13,5 @@ KITTI_SEVERITIES = {
 
 TASKS = []
 
+KITTI_CLS_WEATHER = ['initial', 'fog', 'rain', 'snow']
+

@@ -25,10 +25,8 @@ def fine_tuning(net, args, scenario='online'):
     if scenario == 'online':
         args.epochs = 1
 
-    metric = 'Error'
-    if args.model == 'yolov3':
-        metric = 'mAP@50'
-        config.YOLO_HYP['lr0'] = args.initial_task_lr
+    metric = 'mAP@50'
+    config.YOLO_HYP['lr0'] = args.initial_task_lr
 
     ckpt_folder = join(args.checkpoints_path, args.dataset, args.model, 'fine_tuning', scenario)
     results = ResultsManager()
@@ -37,6 +35,8 @@ def fine_tuning(net, args, scenario='online'):
     tasks = ['initial'] + globals.TASKS
     for idx, args.task in enumerate(tasks):
         current_results = []
+        current_results_map50to95 = []
+
         if not set_severity(args):
             continue
         severity_str = '' if args.task == 'initial' else f'Severity: {args.severity}'
@@ -48,21 +48,23 @@ def fine_tuning(net, args, scenario='online'):
             if not set_severity(args):
                 continue
             test_loader = get_loader(args, split='test', pad=0.5, rect=True)
-            if args.model == 'yolov3':
-                res = test_yolo(model=net, dataloader=test_loader,
-                                iou_thres=args.iou_thres, conf_thres=args.conf_thres,
-                                augment=args.augment)[0] * 100
-            else:
-                res = test(test_loader, net)[0] * 100
+            test_res = test_yolo(model=net, dataloader=test_loader,
+                            iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                            augment=args.augment)
+            res = test_res[0] * 100
+            res_map50to95 = test_res[1][3] * 100
             current_results.append(res)
+            current_results_map50to95.append(res_map50to95)
             log.info(f'\t{metric} on Task-{i} ({tasks[i]}): {res:.1f}')
 
             if i == idx:
                 mean_result = mean(current_results)
+                mean_result_map50to95 = mean(current_results_map50to95)
                 log.info(f'\tMean {metric.lower()} over current task ({tasks[idx]}) '
                          f'and previously seen tasks: {mean_result:.1f}')
                 severity_str = '' if args.task == 'initial' else f'{args.severity}'
                 results.add_result('Fine-Tuning', f'{tasks[idx]} {severity_str}', mean_result, scenario)
+                results.add_result_map50to95('Fine-Tuning', f'{tasks[idx]} {severity_str}', mean_result_map50to95, scenario)
 
     args.epochs = tmp_epochs
     config.YOLO_HYP['lr0'] = args.lr
@@ -72,18 +74,8 @@ def setup_net(net, args, ckpt_folder, idx, scenario):
     if args.task == 'initial':
         net.load_state_dict(load(args.ckpt_path))
     else:
-        if args.model == 'yolov3':
-            device = select_device(args.device, batch_size=args.batch_size)
-            set_yolo_save_dir(args, 'fine_tuning', scenario)
-            train_yolo(args.yolo_hyp(), args, device, model=net)
-        else:
-            ckpt_path = join(ckpt_folder, f'{args.task}_{args.severity}.pt')
-            if not exists(ckpt_path):
-                log.info(f'No checkpoint for Fine-Tuning Task-{idx} '
-                         f'({args.task}) - Starting training.')
-                train(net, args, result_path=ckpt_path,
-                    lr=args.initial_task_lr)
-            else:
-                net.load_state_dict(load(ckpt_path))
+        device = select_device(args.device, batch_size=args.batch_size)
+        set_yolo_save_dir(args, 'fine_tuning', scenario)
+        train_yolo(args.yolo_hyp(), args, device, model=net)
     net.eval()
 

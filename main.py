@@ -10,12 +10,10 @@ import torch.backends.cudnn as cudnn
 from datetime import datetime
 import baselines
 import config
-from disc import disc
-from init import init_net, init_settings, initial_checks, set_paths
+from init import init_net, init_settings, set_paths
 from utils.results_manager import ResultsManager
 from utils.utils import timedelta_to_str
-
-from actmad import test_adapt as actmad
+from dilam import dilam
 
 
 def main(args):
@@ -34,17 +32,21 @@ def main(args):
         log.info(f'{arg}: {getattr(args, arg)}')
     log.info('---------------------------------------------------------------------------------')
 
-    results = ResultsManager('mAP@50' if args.dataset == 'kitti' else 'Error')
+    results = ResultsManager('mAP@50')
 
     init_settings(args)
     if args.usr:
         set_paths(args)
+    net = init_net(args, cls=True)
 
     for run in range(args.num_runs):
-        net = init_net(args)
+        net.load_state_dict(torch.load(args.ckpt_path))
+
         for args.severity_idx in range(args.num_severities):
-            if not args.no_disc:
-                disc(args, net)
+            if not args.no_dilam:
+                dilam(net, args, verbose=args.verbose)
+            if 'disc' in args.baselines:
+                baselines.disc(args, net)
             if 'source_only' in args.baselines:
                 baselines.source_only(net, args)
             for scenario in args.scenario:
@@ -56,8 +58,9 @@ def main(args):
                     baselines.fine_tuning(net, args, scenario)
                 if 'joint_training' in args.baselines:
                     baselines.joint_training(net, args, scenario)
+                if 'joint_training_affine' in args.baselines:
+                    baselines.joint_training_bn_affine(net, args, scenario)
 
-            # plot & log results summary for every severity index
             if results.has_results():
                 timestamp_str = time.strftime('%b-%d-%Y_%H%M', time.localtime())
                 results.save_to_file(file_name=f'{timestamp_str}_raw_results.pkl')
@@ -68,13 +71,13 @@ def main(args):
                     results.reset_results()
                     log.info(f'{">" * 30} FINISHED RUN #{run} {"<" * 30}')
                     runtime = datetime.now() - start_time
+
                     log.info(f'Runtime so far: {timedelta_to_str(runtime)}')
                     torch.cuda.empty_cache()
-                    del net
-
 
     if args.num_runs > 1:
         results.print_multiple_runs_results()
+        results.print_multiple_runs_results_map50to95()
 
     runtime = datetime.now() - start_time
     log.info(f'Execution finished in {timedelta_to_str(runtime)}')
@@ -92,33 +95,42 @@ sys.excepthook = handle_exception
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
+    # General settings
     parser.add_argument('--usr', default=None, type=str)
     parser.add_argument('--dataroot', default='path/to/dataroot')
     parser.add_argument('--ckpt_path', default='path/to/checkpoint.pt')
     parser.add_argument('--dataset', default='kitti')
     parser.add_argument('--model', default=None, type=str)
     parser.add_argument('--logfile', default='log.txt', type=str)
-
-    # General run settings
     parser.add_argument('--tasks', default=[], type=str, nargs='*',
-                        help='List of tasks to run (in given order), empty means defaults from config.py')
-    all_baselines = ['source_only', 'disjoint', 'freezing', 'fine_tuning', 'joint_training']
-    parser.add_argument('--baselines', default=all_baselines, type=str, nargs='*',
+                        help='List of tasks to run (in given order), empty means defaults from config.KITTI_TASKS')
+    all_baselines = ['disc', 'source_only', 'disjoint', 'freezing', 'fine_tuning', 'joint_training', 'joint_training_affine']
+    parser.add_argument('--baselines', default=[], type=str, nargs='*', choices=all_baselines,
                         help='List of baselines to run')
-    parser.add_argument('--scenario', default=['online', 'offline'], type=str, nargs='*',
+    parser.add_argument('--scenario', default=['online'], type=str, nargs='*',
                         help='Scenarios to run (online and/or offline)')
-    parser.add_argument('--robustness_severities', default=['5'], type=str, nargs='*')
     parser.add_argument('--fog_severities', default=['fog_30'], type=str, nargs='*')
     parser.add_argument('--rain_severities', default=['200mm'], type=str, nargs='*')
     parser.add_argument('--snow_severities', default=['5'], type=str, nargs='*')
     parser.add_argument('--checkpoints_path', default='checkpoints', help='path where model checkpoints will be saved')
     parser.add_argument('--num_runs', default=1, type=int)
 
+    # DILAM
+    parser.add_argument('--no_dilam_adapt', action='store_true', help='do not run DILAM adapt')
+    parser.add_argument('--dilam_adapt_all', action='store_true',
+                        help='DILAM adapt for all BN layers. Without this option '
+                             'the first 2 BN layers are not adapted.')
+    parser.add_argument('--knn', action='store_true', help='Use KNN classifier. Implies dilam_adapt_all.')
+    parser.add_argument('--cls_ckpt_path', default='checkpoints/kitti_cls_head_single_layer.pt',
+                        help='path to linear classification head checkpoint')
+    parser.add_argument('--no_dilam', action='store_true', help='do not run DILAM')
+    parser.add_argument('--no_augment_dilam', action='store_true', help='do not use augmented inference in DILAM')
+    parser.add_argument('--dilam_adapt_batch_size', default=30, type=int)
+
     # DUA/DISC adaption
     parser.add_argument('--num_samples', default=50, type=int)
     parser.add_argument('--decay_factor', default=0.94, type=float)
     parser.add_argument('--min_mom', default=0.005, type=float)
-    parser.add_argument('--no_disc', action='store_true', help='do not run DISC')
     parser.add_argument('--no_disc_adaption', action='store_true',
                         help='skip DISC adaption phase (assumes existing BN running estimates checkpoint)')
 
@@ -138,22 +150,13 @@ if __name__ == '__main__':
     # lr_factor to a different value
     parser.add_argument('--patience', default=4, type=int)
     parser.add_argument('--lr_factor', default=1/3, type=float)
-    parser.add_argument('--verbose', default=True, type=bool)
+    parser.add_argument('--verbose', action='store_true')
     parser.add_argument('--max_unsuccessful_reductions', default=3, type=int)
 
-    # For creating a val/test set from train set for CIFAR/ImageNet
-    parser.add_argument('--split_ratio', default=0.35, type=float)
-    parser.add_argument('--split_seed', default=42, type=int)
-
-    # ResNet
-    parser.add_argument('--depth', default=26, type=int)
-    parser.add_argument('--width', default=1, type=int)
-    parser.add_argument('--group_norm', default=0, type=int)
-    parser.add_argument('--rotation_type', default='rand')
 
     # yolov3
     parser.add_argument('--weights', type=str, default='yolov3.pt', help='initial weights path')
-    parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
+    parser.add_argument('--cfg', type=str, default='models/yolov3.yaml', help='model.yaml path')
     parser.add_argument('--img_size', nargs='+', type=int, default=[640, 640], help='[train, test] image sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--device', default='3', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
@@ -165,8 +168,8 @@ if __name__ == '__main__':
                              'Without this option previously saved heads are moved.')
     parser.add_argument('--conf_thres', type=float, default=0.001, help='object confidence threshold')
     parser.add_argument('--iou_thres', type=float, default=0.6, help='IOU threshold for NMS')
-    parser.add_argument('--augment', default = False, action='store_true', help='augmented inference')
     # yolov3 untested
+    parser.add_argument('--augment', default = False, action='store_true', help='augmented inference')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
     parser.add_argument('--notest', action='store_true', help='only test final epoch')
     parser.add_argument('--noautoanchor', action='store_true', help='disable autoanchor check')

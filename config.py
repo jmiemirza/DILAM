@@ -9,11 +9,6 @@ ROBUSTNESS_TASKS = [
 
 KITTI_TASKS = ['fog', 'rain', 'snow']
 
-# KITTI_TASKS = ['rain', 'fog', 'snow']
-
-# KITTI_TASKS = ['snow', 'rain', 'fog']
-
-
 PATHS = {
     'sl': {
         'cifar10': {
@@ -124,6 +119,7 @@ LOGGER_CFG = {
         'BASELINE.FREEZING': {},
         'BASELINE.DISJOINT': {},
         'BASELINE.JOINT_TRAINING': {},
+        'BASELINE.JOINT_BN_AFFINE': {},
         'BASELINE.SOURCE_ONLY': {},
         'BASELINE.FINE_TUNING': {},
 
@@ -142,7 +138,13 @@ LOGGER_CFG = {
             'handlers': ['file_handler'],
             'level': 'DEBUG',
             'propagate': False
-        }
+        },
+
+        'MODEL': {
+            'handlers': ['console_handler', 'file_handler'],
+            'level': 'DEBUG',
+            'propagate': False
+        },
     }
 }
 

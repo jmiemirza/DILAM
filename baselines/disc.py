@@ -6,7 +6,7 @@ from statistics import mean
 from torch import load
 
 import globals
-from dua import dua
+from baselines.dua import dua
 from utils.data_loader import get_all_severities_str, get_loader, set_severity
 from utils.results_manager import ResultsManager
 from utils.testing import test
@@ -29,10 +29,7 @@ def disc_adaption(args, net, save_bn_stats=True, use_training_data=True, save_fn
 
 def disc_plug_and_play(args, net, bn_file_name=None):
     ckpt = load(args.ckpt_path)
-    metric = 'Error'
-    if args.model == 'yolov3':
-        metric = 'mAP@50'
-
+    metric = 'mAP@50'
     bn_file_path = join('checkpoints', args.dataset, args.model)
     if not bn_file_name:
         bn_file_name = 'BN_stats.pt'
@@ -52,6 +49,7 @@ def disc_plug_and_play(args, net, bn_file_name=None):
         severity_str = '' if args.task == 'initial' else f'Severity: {args.severity}'
         log.info(f'Start evaluation for Task-{idx} ({args.task}). {severity_str}')
         current_results = []
+        current_results_map50to95 = []
 
         for i in range(0, idx + 1):
             args.task = tasks[i]
@@ -59,22 +57,26 @@ def disc_plug_and_play(args, net, bn_file_name=None):
                 continue
             load_bn_stats(net, args.task, ckpt)
             test_loader = get_loader(args, split='test', pad=0.5, rect=True)
-            if args.model == 'yolov3':
-                res = test_yolo(model=net, dataloader=test_loader,
-                                iou_thres=args.iou_thres, conf_thres=args.conf_thres,
-                                augment=args.augment)[0] * 100
-            else:
-                res = test(test_loader, net)[0] * 100
+            test_res = test_yolo(model=net, dataloader=test_loader,
+                            iou_thres=args.iou_thres, conf_thres=args.conf_thres,
+                            augment=args.augment)#[0] * 100
+            res = test_res[0] * 100
+            res_map50to95 = test_res[1][3] * 100
             current_results.append(res)
-            log.info(f'    {metric} on Task-{i} ({tasks[i]}): {res:.1f}')
+            current_results_map50to95.append(res_map50to95)
+            log.info(f'    {metric} on Task-{i} ({tasks[i]}): {res:.1f}, map50to95: {res_map50to95}')
 
             if i == idx:
                 mean_result = mean(current_results)
+                mean_result_map50to95 = mean(current_results_map50to95)
                 log.info(f'Mean {metric.lower()} over current task ({tasks[i]}) '
                          f'and previously seen tasks: {mean_result:.1f}')
                 severity_str = '' if args.task == 'initial' else f'{args.severity}'
                 results.add_result('DISC', f'{tasks[i]} {severity_str}', mean_result, 'online')
                 results.add_result('DISC', f'{tasks[i]} {severity_str}', mean_result, 'offline')
+
+                results.add_result_map50to95('DISC', f'{tasks[i]} {severity_str}', mean_result_map50to95, 'online')
+                results.add_result_map50to95('DISC', f'{tasks[i]} {severity_str}', mean_result_map50to95, 'offline')
 
 
 def load_bn_stats(net, task, ckpt=None):

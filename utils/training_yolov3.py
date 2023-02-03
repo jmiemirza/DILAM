@@ -38,7 +38,8 @@ from utils.training import ReduceLROnPlateauEarlyStop
 logger = logging.getLogger('TRAINING')
 
 
-def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False, freeze=[]):
+def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False, freeze=[],
+          freeze_all_bn_running_estimates=False):
     logger.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
     save_dir, epochs, batch_size, total_batch_size, weights, rank = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.total_batch_size, opt.weights, opt.global_rank
@@ -212,6 +213,12 @@ def train(hyp, opt, device, tb_writer=None, wandb=None, model=None, joint=False,
                 if isinstance(m, nn.modules.batchnorm._BatchNorm):
                     if not m.get_parameter('weight').requires_grad:
                         m.eval()
+
+        # TODO this can be combined with the if above for efficiency
+        if freeze_all_bn_running_estimates:
+            for m in model.modules():
+                if isinstance(m, nn.modules.batchnorm._BatchNorm):
+                    m.eval()
 
         # Update image weights (optional)
         if opt.image_weights:

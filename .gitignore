@@ -1,4 +1,5 @@
 *.pt
+*.pth
 **/__pycache__
 /results
 /checkpoints

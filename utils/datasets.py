@@ -7,8 +7,9 @@ import pickle
 import random
 from itertools import repeat
 from multiprocessing.pool import ThreadPool
-from os.path import join, split
+from os.path import join, split, normpath
 from pathlib import Path
+from itertools import cycle, islice
 
 import cv2
 import numpy as np
@@ -16,8 +17,9 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data import Dataset
-from torchvision.datasets import ImageFolder, vision
 from tqdm import tqdm
+from torchvision.datasets.folder import pil_loader, default_loader
+import torchvision.transforms as transforms
 
 from utils.general import (resample_segments, segment2box, segments2boxes,
                            xyn2xy, xywh2xyxy, xywhn2xyxy, xyxy2xywh)
@@ -25,108 +27,67 @@ from utils.general import (resample_segments, segment2box, segments2boxes,
 logging = logging.getLogger('MAIN.DATA')
 
 
-class ImgNet(ImageFolder):
-    """
-        Class for Imagenet and Imagenet-mini dataset.
-        For training and test split, the entire training set is choosen
-        and expected to be filtered for an appropriate subset by the creator.
-    """
-    initial_dir = ''
+class LoadImagesForTaskClassification(Dataset):
+    def __init__(self, path, img_dirs=[], rect=False, max_shape=(376, 1242), **kwargs):
+        self.img_size = 640
 
-    def __init__(self, root, split, task, severity, transform, **kwargs):
-        split_dir = 'val' if split == 'val' else 'train'
-        if task == 'initial':
-            root = os.path.join(root, self.initial_dir, split_dir)
-        else:
-            root = os.path.join(root, self.initial_dir + '-c', split_dir, task,
-                                str(severity))
-        super().__init__(root, transform, **kwargs)
+        self.rect = rect
+        self.max_shape = max_shape
 
-
-    def get_image_from_idx(self, idx: int = 0):
-        return Image.open(self.imgs[idx][0])
-
-
-class CIFAR(vision.VisionDataset):
-    """
-        Class for Cifar10 dataset.
-        For training and validation split, the entire training set is choosen
-        and expected to be filtered for an appropriate subset by the creator.
-    """
-    corruptions_dir = 'CIFAR-10-C'
-    def __init__(self, root: str, task, split='train', transform=None,
-                 target_transform=None, severity=1):
-        super().__init__(root, transform=transform,
-                         target_transform=target_transform)
-
-        self.num_samples = 10000 if split == 'test' else 50000
-        split_dir = 'test' if split == 'test' else 'train'
-
-        self.data = []
-        self.targets = []
-
-        if task == 'initial':
-            self._load_initial_task(split)
-            return
-
-        start = self.num_samples * (severity - 1)
-        end = self.num_samples * severity
-        targets_path = os.path.join(self.root, self.corruptions_dir, split_dir, 'labels.npy')
-        self.targets = np.load(targets_path)[start : end]
-        f_path = os.path.join(self.root, self.corruptions_dir, split_dir, f'{task}.npy')
-        self.data = np.load(f_path, mmap_mode='c')[start : end]
-
-
-
-    def _load_initial_task(self, split):
-        base_folder = "cifar-10-batches-py"
-        train_list = ["data_batch_1", "data_batch_2", "data_batch_3",
-                      "data_batch_4", "data_batch_5"]
-        test_list = ["test_batch"]
-
-        for file_name in test_list if split == 'test' else train_list:
-            file_path = os.path.join(self.root, base_folder, file_name)
-            with open(file_path, "rb") as f:
-                entry = pickle.load(f, encoding="latin1")
-                self.data.append(entry["data"])
-                if "labels" in entry:
-                    self.targets.extend(entry["labels"])
-                else:
-                    self.targets.extend(entry["fine_labels"])
-
-        self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
-        self.data = self.data.transpose((0, 2, 3, 1))
-
-
-    def __getitem__(self, idx: int):
-        img, target = self.data[idx], self.targets[idx]
-
-        img = Image.fromarray(img)
-        if self.transform is not None:
-            img = self.transform(img)
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return img, target
+        p = Path(path)
+        if not p.is_file():
+            raise Exception(f'{p} does not exist or is not a file')
+        with open(p, 'r') as t:
+            # iterating over all images, use a different image directory in
+            # every step, when constructing the image paths
+            fname_dir_tuples = zip(t.read().strip().splitlines(), cycle(img_dirs))
+            self.img_files = [normpath(join(img_dir, fname)) for fname, img_dir in fname_dir_tuples]
+            # list of img_dirs indices cycled to number of images
+            self.labels = list(islice(cycle(range(len(img_dirs))), len(self.img_files)))
+        assert self.img_files, 'No images found'
+        assert len(self.img_files) == len(self.labels)
 
 
     def __len__(self):
-        return self.num_samples
+        return len(self.img_files)
 
 
-    def get_image_from_idx(self, idx: int = 0):
-        return Image.fromarray(self.data[idx])
+    def __getitem__(self, idx: int):
+        img_path, target = self.img_files[idx], self.labels[idx]
+        img = cv2.imread(img_path)
+        assert img is not None, 'Image Not Found ' + img_path
+        h0, w0 = img.shape[:2]  # orig hw
 
-# --------------------------------- YOLOv3 -------------------------------------
+        if self.rect:
+            r = max(self.max_shape) / max(h0, w0)  # ratio
+            augment = False
+            if r != 1:  # if sizes are not equal
+                img = cv2.resize(img, (int(w0 * r), int(h0 * r)),
+                                interpolation=cv2.INTER_AREA if r < 1 and not augment else cv2.INTER_LINEAR)
+            img, _, _ = letterbox(img, self.max_shape, auto=False, scaleup=augment)
+        else:
+            r = self.img_size / max(h0, w0)  # ratio
+            augment = False
+            if r != 1:  # if sizes are not equal
+                img = cv2.resize(img, (int(w0 * r), int(h0 * r)),
+                                interpolation=cv2.INTER_AREA if r < 1 and not augment else cv2.INTER_LINEAR)
+            img, _, _ = letterbox(img, (self.img_size, self.img_size), auto=False, scaleup=augment)
+
+        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = np.ascontiguousarray(img)
+        return torch.from_numpy(img), target
+
+
+
 
 help_url = 'https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data'
 img_formats = ['bmp', 'jpg', 'jpeg', 'png', 'tif', 'tiff', 'dng', 'webp', 'mpo']  # acceptable image suffixes
 vid_formats = ['mov', 'avi', 'mp4', 'mpg', 'mpeg', 'm4v', 'wmv', 'mkv']  # acceptable video suffixes
 
 class LoadImagesAndLabels(Dataset):  # for KITTI training/testing
-    def __init__(self, path, img_size=1242, batch_size=16, augment=False,
+    def __init__(self, path, img_size=640, batch_size=16, augment=False,
                  hyp=None, rect=False, image_weights=False, cache_images=False,
-                 single_cls=False, stride=32, pad=0.0, prefix='', imgs_dir=[]):
+                 single_cls=False, stride=32, pad=0.0, prefix='', img_dirs=[], **kwargs):
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -140,15 +101,13 @@ class LoadImagesAndLabels(Dataset):  # for KITTI training/testing
             f = []  # image files
             for p in path if isinstance(path, list) else [path]:
                 p = Path(p)  # os-agnostic
-                if p.is_dir():  # dir
-                    f += glob.glob(str(p / '**' / '*.*'), recursive=True)
-                elif p.is_file():  # file
+                if p.is_file():  # file
                     with open(p, 'r') as t:
-                        t = [os.path.join(i_dir, x) for x in t.read().strip().splitlines() for i_dir in imgs_dir]
+                        t = [os.path.join(i_dir, x) for x in t.read().strip().splitlines() for i_dir in img_dirs]
                         parent = str(p.parent) + os.sep
                         f += [x.replace('./', parent) if x.startswith('./') else x for x in t]  # local to global path
                 else:
-                    raise Exception(f'{prefix}{p} does not exist')
+                    raise Exception(f'{prefix}{p} does not exist or is a directory')
             self.img_files = sorted([x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in img_formats])
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
@@ -161,12 +120,12 @@ class LoadImagesAndLabels(Dataset):  # for KITTI training/testing
         # Creating a cache path that is unique for chosen task severities and split
         split_str = Path(path).stem
         task_severity_str = ''
-        if len(imgs_dir) == 1:
-            task_dir, severity = split(imgs_dir[0])
+        if len(img_dirs) == 1:
+            task_dir, severity = split(img_dirs[0])
             task = split(task_dir)[1]
             task_severity_str = f'{task}-{severity}_'
         else:
-            for i_dir in imgs_dir:
+            for i_dir in img_dirs:
                 task_dir, severity = split(i_dir)
                 task = split(task_dir)[1]
                 task_severity_str += f'{task}-{severity}_'

@@ -10,7 +10,7 @@ from copy import deepcopy
 from pathlib import Path
 
 sys.path.append(Path(__file__).parent.parent.absolute().__str__())  # to run '$ python *.py' files in subdirectories
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('MODEL')
 
 from models.common import *
 from models.experimental import *
@@ -23,8 +23,7 @@ import math
 from copy import copy
 from pathlib import Path
 
-
-
+import globals
 
 try:
     import thop  # for FLOPS computation
@@ -46,7 +45,7 @@ class Detect(nn.Module):
         a = torch.tensor(anchors).float().view(self.nl, -1, 2)
         self.register_buffer('anchors', a)  # shape(nl,na,2)
         self.register_buffer('anchor_grid', a.clone().view(self.nl, 1, -1, 1, 1, 2))  # shape(nl,1,na,1,1,2)
-        #print(len(ch))
+        # print(len(ch))
         self.m = nn.ModuleList(nn.Conv2d(x, self.no * self.na, 1) for x in ch)  # output conv
         self.inplace = inplace  # use in-place ops (e.g. slice assignment)
 
@@ -64,6 +63,7 @@ class Detect(nn.Module):
 
                 y = x[i].sigmoid()
                 if self.inplace:
+                    # print(f'GPU: y {y.device}, x {x[i].device}, sg {self.grid[i].device}, ss {self.stride[i].device}')
                     y[..., 0:2] = (y[..., 0:2] * 2. - 0.5 + self.grid[i]) * self.stride[i]  # xy
                     y[..., 2:4] = (y[..., 2:4] * 2) ** 2 * self.anchor_grid[i]  # wh
                 else:  # for YOLOv5 on AWS Inferentia https://github.com/ultralytics/yolov5/pull/2953
@@ -121,11 +121,160 @@ class Model(nn.Module):
         self.info()
         logger.info('')
 
+        # single lin layer cls head
+        self.num_hid_cls_layers = 2
+        last_dim = 64  # encoder output dim
+        self.cls_dim = 4  # 4 weather conditions
+        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))  # 4 classes
+        self.model_cls = self.model[:2] # only first two batchnorms are used now (meaning 4 parameters)
+        self.class_head = nn.Linear(last_dim, self.cls_dim)
+
+        # first cls head
+        # self.num_hid_cls_layers = 2
+        # class_blocks = []
+        # last_dim = 64  # encoder output dim
+        # self.cls_dim = 4  # 4 weather conditions
+        # self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))  # 4 classes
+        # self.model_cls = self.model[:2]
+        # for cls_block in range(0, self.num_hid_cls_layers):
+        #     norm_layer = nn.BatchNorm1d(last_dim)
+        #     class_blocks.extend((nn.Linear(last_dim, last_dim), norm_layer, nn.ReLU(inplace=True), nn.Dropout(0.5)))
+        # self.class_head = nn.Sequential(*class_blocks, nn.Linear(last_dim, self.cls_dim))  # 4 outputs
+
+
     def forward(self, x, augment=False, profile=False):
         if augment:
             return self.forward_augment(x)  # augmented inference, None
         else:
             return self.forward_once(x, profile)  # single-scale inference, train
+
+
+    def forward_cls(self, x, verbose=False):
+        y, dt = [], []  # outputs
+
+        for m in self.model_cls:
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            x = m(x)  # run
+            y.append(x if m.i in self.save else None)  # save output
+        output_feat = self.avg_pool(x)
+        output_feat = torch.squeeze(output_feat)
+        output_feat = self.class_head(output_feat)
+
+        if verbose:
+            logger.info(output_feat.max(1)[1])
+
+        return output_feat
+
+
+    def double_forward_cls_affine(self, x, initial_ckpt_path, cls_ckpt_path, verbose=False, task=None):
+        cls_out = self.forward_cls(x, False)
+        # logger.info(f'{cls_out.shape} ::: {cls_out}')
+        device = next(self.parameters()).device
+        if cls_out.dim() < 2:
+            predictions = cls_out[None, ...].max(1)[1]
+        else:
+            predictions = cls_out.max(1)[1]
+
+        max_predicted = predictions.bincount().argmax()
+
+        if verbose:
+            # logger.info(predictions)
+            if task:
+                predicted_task = globals.KITTI_CLS_WEATHER[max_predicted]
+                if task != predicted_task:
+                    logger.info(f'{predictions}')
+                    logger.info(f'Batch cls MISS - pred: {predicted_task} | true: {task}')
+
+        if max_predicted == 0:
+            self.load_state_dict(torch.load(initial_ckpt_path, map_location=device))
+        else:
+            state_dict = self.state_dict()
+            for layer_name, val in self.bn_affine[globals.KITTI_CLS_WEATHER[max_predicted]].items():
+                state_dict[layer_name + '.weight'] = val['weight']
+                state_dict[layer_name + '.bias'] = val['bias']
+            self.load_state_dict(state_dict)
+        self.eval()
+
+        y = []  # outputs
+        for m in self.model:
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            x = m(x)  # run
+            y.append(x if m.i in self.save else None)  # save output
+
+        self.load_state_dict(torch.load(initial_ckpt_path, map_location=device))
+        self.class_head.load_state_dict(torch.load(cls_ckpt_path, map_location=device))
+        self.eval()
+
+        return x
+
+    def double_forward_augment_cls_affine(self, x, initial_ckpt_path, cls_ckpt_path, verbose=False, task=None):
+        img_size = x.shape[-2:]  # height, width
+        s = [1, 0.83, 0.67]  # scales
+        f = [None, 3, None]  # flips (2-ud, 3-lr)
+        y = []  # outputs
+        for si, fi in zip(s, f):
+            xi = scale_img(x.flip(fi) if fi else x, si, gs=int(self.stride.max()))
+            yi = self.double_forward_cls_affine(xi, initial_ckpt_path, cls_ckpt_path, verbose, task=task)[0]  # forward
+            yi = self._descale_pred(yi, fi, si, img_size)
+            y.append(yi)
+        return torch.cat(y, 1), None  # augmented inference, train
+
+
+    def forward_cls_affine(self, x, initial_ckpt_path, cls_ckpt_path, verbose=False):
+        y = []  # outputs
+        for m in self.model_cls:
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            x = m(x)  # run
+            y.append(x if m.i in self.save else None)  # save output
+        output_feat = self.avg_pool(x)
+        output_feat = torch.squeeze(output_feat)
+        output_feat = self.class_head(output_feat)
+
+        # change BN affine based on output_feat --------------------------------
+        predictions = output_feat.max(1)[1]
+        max_predicted = predictions.bincount().argmax()
+
+        if verbose:
+            logger.info(f'mpred: {max_predicted}, pred: {predictions}')
+
+        device = next(self.parameters()).device
+        if max_predicted == 0:
+            self.load_state_dict(torch.load(initial_ckpt_path, map_location=device))
+        else:
+            state_dict = self.state_dict()
+            for layer_name, val in self.bn_affine[globals.KITTI_CLS_WEATHER[max_predicted]].items():
+                state_dict[layer_name + '.weight'] = val['weight']
+                state_dict[layer_name + '.bias'] = val['bias']
+            self.load_state_dict(state_dict)
+        self.eval()
+
+        for m in self.model[2:]:
+            if m.f != -1:  # if not from previous layer
+                x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
+            x = m(x)  # run
+            y.append(x if m.i in self.save else None)  # save output
+
+        self.class_head.load_state_dict(torch.load(cls_ckpt_path, map_location=device))
+        self.eval()
+
+        return x
+
+
+    def forward_augment_cls_affine(self, x, initial_ckpt_path, cls_ckpt_path, verbose=False):
+        img_size = x.shape[-2:]  # height, width
+        s = [1, 0.83, 0.67]  # scales
+        f = [None, 3, None]  # flips (2-ud, 3-lr)
+        y = []  # outputs
+        for si, fi in zip(s, f):
+            xi = scale_img(x.flip(fi) if fi else x, si, gs=int(self.stride.max()))
+            yi = self.forward_cls_affine(xi, initial_ckpt_path, cls_ckpt_path, verbose)[0]  # forward
+            yi = self._descale_pred(yi, fi, si, img_size)
+            y.append(yi)
+        return torch.cat(y, 1), None  # augmented inference, train
+
 
     def forward_augment(self, x):
         img_size = x.shape[-2:]  # height, width
@@ -139,6 +288,7 @@ class Model(nn.Module):
             yi = self._descale_pred(yi, fi, si, img_size)
             y.append(yi)
         return torch.cat(y, 1), None  # augmented inference, train
+
 
     def forward_once(self, x, profile=False):
         y, dt = [], []  # outputs
@@ -161,7 +311,7 @@ class Model(nn.Module):
 
         if profile:
             logger.info('%.1fms total' % sum(dt))
-        #print(x[0].shape)
+        # print(x[0].shape)
         return x
 
     def _descale_pred(self, p, flips, scale, img_size):
@@ -238,7 +388,7 @@ class Model(nn.Module):
 
 
 def parse_model(d, ch):  # model_dict, input_channels(3)
-    logger.info('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
+    logger.info('%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
     anchors, nc, gd, gw = d['anchors'], d['nc'], d['depth_multiple'], d['width_multiple']
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
     no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
