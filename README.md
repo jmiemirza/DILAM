@@ -33,20 +33,6 @@ to the dataset directory, as described in the following section ([Directory stru
 ### Directory structure:
 Dataset direcory structure as described [here](directory_scructures.md).
 
-# Pretrained Checkpoints
-
-Pretrained checkpoints can be downloaded. [TODO: links]
-
-* Download KITTI pre-trained [Yolov3](https://arxiv.org/abs/1804.02767) from [here](https://drive.google.com/file/d/1NWwhX7zmsQh0791VUL_5mB9cF29Xd0SU/view?usp=sharing).
-
-* Memory bank with all batchnorm layers adapted.
-
-* Memory bank with all except the first two batchnorm layers adapted.
-
-* Classification head when using the linear classification head.
-
-We recommend placing all checkpoints in `./checkpoints/`.
-
 # Running Experiments
 
 Recommended Python verion: `Python 3.6.9`
