@@ -86,3 +86,12 @@ To train a new classification head the existing checkpoint, by default found in 
 can be used to specify a path to the new checkpoint, if that path leads to a checkpoint
 that does not exist a new checkpoint will be trained and saved at that location.
 
+#### To cite us:
+```bibtex
+@InProceedings{stefan2023dilam,
+    author    = {Leitner, Stefan and Mirza, M. Jehanzeb and Lin, Wei and Micorek, Jakub and Masana, Marc and Kozinski, Mateusz and Possegger, Horst and Bischof, Horst},
+    title     = {Sit Back and Relax: Learning to Drive Incrementally in All Weather Conditions},
+    booktitle = {Proceedings of the IEEE Intelligent Vehciles Symposium},
+    year      = {2023}
+}
+```
